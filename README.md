@@ -56,6 +56,21 @@ API base URL: `http://127.0.0.1:8000/api`
 - **Hostinger shared hosting:** see [DEPLOYMENT_HOSTINGER.md](DEPLOYMENT_HOSTINGER.md)
 - **No signals?** see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
+### 4. Dashboard
+
+Web UI at `/dashboard` (password-protected):
+
+```env
+DASHBOARD_PASSWORD=your-secure-password
+```
+
+```bash
+npm install && npm run build   # compile Tailwind assets
+php artisan serve
+```
+
+Open `http://127.0.0.1:8000/dashboard` and sign in.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
@@ -93,7 +108,7 @@ TRADING_SYMBOLS=BTCUSDT,ETHUSDT,PAXGUSDT,XAUUSD,EURUSD,GBPUSD
 - [x] M4 — MT5 auto execution
 - [x] M5 — Trade synchronization
 - [x] M6 — AI position management
-- [ ] M7 — Analytics dashboard (Phase 2)
+- [x] M7 — Analytics dashboard (Phase 2)
 - [ ] M8 — Multi-AI consensus (Phase 2)
 
 ## Risk Warning
