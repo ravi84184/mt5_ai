@@ -115,6 +115,17 @@ php artisan tinker
 // Stuck jobs?
 \DB::table('jobs')->count();
 \DB::table('failed_jobs')->get();
+
+// AI input/output logs
+\App\Models\AiInteractionLog::latest()->take(3)->get(['id','symbol','status','created_at']);
+```
+
+**View AI logs via CLI:**
+
+```bash
+php artisan ai:logs --limit=10
+php artisan ai:logs --id=59           # full prompts + response
+php artisan ai:logs --symbol=XAUUSD --type=entry
 ```
 
 | What you see | Problem |
@@ -125,7 +136,7 @@ php artisan tinker
 | Signals with `WAIT` | AI said wait — normal, MT5 won't trade |
 | Signals `REJECTED` | Failed risk rules (confidence, max trades, session) |
 | Signals `PENDING` + BUY/SELL | Should appear in MT5 poll — check account login matches |
-| failed_jobs rows | AI API error — check laravel.log |
+| failed_jobs rows | AI API error — check laravel.log or `ai:logs` |
 
 ---
 

@@ -7,7 +7,9 @@ use App\Enums\SignalStatus;
 use App\Models\Account;
 use App\Models\MarketSnapshot;
 use App\Models\Signal;
+use App\Services\AI\AiInteractionLogger;
 use App\Services\AI\AiServiceFactory;
+use App\Services\AI\PromptBuilder;
 use App\Services\RiskManagementService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -55,18 +57,34 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                 continue;
             }
 
-            try {
-                $context = [
-                    'account' => [
-                        'balance' => $account->balance,
-                        'equity' => $account->equity,
-                    ],
-                    'symbol' => $symbolData,
-                    'risk' => config('trading.risk'),
-                ];
+            $context = [
+                'account' => [
+                    'balance' => $account->balance,
+                    'equity' => $account->equity,
+                ],
+                'symbol' => $symbolData,
+                'risk' => config('trading.risk'),
+            ];
 
+            $systemPrompt = PromptBuilder::entrySystemPrompt();
+            $userPrompt = PromptBuilder::entryUserPrompt($context);
+            $startedAt = microtime(true);
+
+            try {
                 $decision = $ai->analyzeEntry($context);
+                $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
             } catch (\Throwable $e) {
+                $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
+                AiInteractionLogger::logError(
+                    'entry',
+                    $context,
+                    $systemPrompt,
+                    $userPrompt,
+                    $e->getMessage(),
+                    $durationMs,
+                    $account->id,
+                    $symbol,
+                );
                 Log::error('AI entry analysis failed', [
                     'account_id' => $account->id,
                     'symbol' => $symbol,
@@ -89,6 +107,18 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                 'status' => SignalStatus::Pending,
                 'ai_provider' => $provider,
             ]);
+
+            AiInteractionLogger::logSuccess(
+                'entry',
+                $context,
+                $systemPrompt,
+                $userPrompt,
+                $decision,
+                $durationMs,
+                $account->id,
+                $signal->id,
+                $signal->symbol,
+            );
 
             if ($rejection = $riskService->getRejectionReason($account, $signal)) {
                 $signal->update([

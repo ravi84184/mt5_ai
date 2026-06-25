@@ -49,6 +49,7 @@ class DiagnoseMt5Command extends Command
             ['signals REJECTED', Signal::where('status', 'REJECTED')->count()],
             ['jobs (queued)', DB::table('jobs')->count()],
             ['failed_jobs', DB::table('failed_jobs')->count()],
+            ['ai_interaction_logs', \App\Models\AiInteractionLog::count()],
         ]);
 
         $latestSnapshot = MarketSnapshot::latest()->first();
@@ -110,6 +111,8 @@ class DiagnoseMt5Command extends Command
 
         $this->newLine();
         $this->line('Tip: php artisan mt5:diagnose --account=YOUR_MT5_LOGIN');
+        $this->line('Tip: php artisan ai:logs --limit=10');
+        $this->line('Tip: php artisan ai:logs --id=1');
 
         return self::SUCCESS;
     }
