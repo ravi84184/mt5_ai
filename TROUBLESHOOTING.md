@@ -248,16 +248,48 @@ Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
 
 If `https://mt5-ai.niksofts.com/up` works but `/dashboard` returns 404, the server does not have the latest code or route cache is stale.
 
+**Symptom:** `head routes/web.php` shows dashboard routes, but `php artisan route:list | grep dashboard` is **empty** and `/` still shows the Laravel welcome page.
+
+**Cause:** Usually a **stale route cache** at `bootstrap/cache/routes-v7.php`. When this file exists, Laravel ignores `routes/web.php` entirely and serves old routes (welcome page at `/`, no dashboard).
+
+`route:clear` and PHP-FPM restart may not delete the file if permissions are wrong.
+
 **On the server (SSH):**
 
 ```bash
 cd /var/www/mt5_ai/backend
-git pull origin main
-composer install --no-dev --optimize-autoloader
-php artisan config:clear
+
+# 1. Check for stale route cache (most common cause)
+ls -la bootstrap/cache/routes-v7.php
+
+# 2. Force-delete all bootstrap caches
+sudo rm -f bootstrap/cache/routes-v7.php bootstrap/cache/config.php bootstrap/cache/services.php
 php artisan route:clear
-php artisan view:clear
+php artisan optimize:clear
+
+# 3. Pull latest code (includes mt5:routes-fix helper)
+git pull origin main
+composer dump-autoload
+
+# 4. Verify dashboard files exist
+ls -la app/Http/Controllers/Dashboard/
+
+# 5. Verify routes (run in a NEW command after cache delete)
+php artisan route:list | grep dashboard
+
+# 6. Restart PHP-FPM
+sudo systemctl restart php8.5-fpm
 ```
+
+Or use the fix command (after git pull):
+
+```bash
+php artisan mt5:routes-fix
+php artisan route:list | grep dashboard
+sudo systemctl restart php8.5-fpm
+```
+
+You should see routes like `dashboard.login`, `dashboard.index`, etc.
 
 **In `.env` add:**
 
@@ -265,9 +297,23 @@ php artisan view:clear
 DASHBOARD_PASSWORD=your-secure-password
 ```
 
-Then open `/dashboard` — you should see the login page (not 404).
+Then test:
+
+```bash
+curl -I https://mt5-ai.niksofts.com/dashboard/login
+```
+
+Expected: `HTTP/1.1 200` (login page), not `404`.
 
 **No npm needed.** The dashboard is plain Laravel Blade + `public/css/dashboard.css`.
+
+**If routes still missing after FPM restart**, nginx may point at a different app directory:
+
+```bash
+sudo nginx -T 2>/dev/null | grep "root "
+```
+
+Ensure `root` is `/var/www/mt5_ai/backend/public` (or your actual deploy path).
 
 ---
 

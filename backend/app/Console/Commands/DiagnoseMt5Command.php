@@ -19,6 +19,27 @@ class DiagnoseMt5Command extends Command
         $this->info('MT5 AI Trading — Diagnostics');
         $this->newLine();
 
+        $routeCache = base_path('bootstrap/cache/routes-v7.php');
+        if (file_exists($routeCache)) {
+            $this->error('Stale route cache detected: bootstrap/cache/routes-v7.php');
+            $this->line('  Run: php artisan mt5:routes-fix');
+            $this->newLine();
+        }
+
+        $dashboardRoutes = collect(\Illuminate\Support\Facades\Route::getRoutes()->getRoutes())
+            ->filter(fn ($route) => str_contains($route->uri(), 'dashboard'))
+            ->count();
+
+        if ($dashboardRoutes === 0) {
+            $this->error('Dashboard routes NOT registered (0 found)');
+            $this->line('  Run: php artisan mt5:routes-fix');
+            $this->line('  Then: php artisan route:list | grep dashboard');
+            $this->newLine();
+        } else {
+            $this->info("Dashboard routes registered: {$dashboardRoutes}");
+            $this->newLine();
+        }
+
         $this->line('Config:');
         $this->table(['Key', 'Value'], [
             ['APP_URL', config('app.url')],
