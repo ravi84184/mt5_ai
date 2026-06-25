@@ -244,6 +244,19 @@ Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
 
 ---
 
+## Super Admin 404 at `/admin`
+
+If `https://mt5-ai.niksofts.com/up` works but `/admin` returns 404, see route cache fix below.
+
+Old `/dashboard` URLs redirect to `/admin` automatically.
+
+**Login:** `https://mt5-ai.niksofts.com/admin/login`
+
+**Env:**
+```env
+ADMIN_PASSWORD=your-secure-password
+```
+
 ## Dashboard 404 at `/dashboard`
 
 If `https://mt5-ai.niksofts.com/up` works but `/dashboard` returns 404, the server does not have the latest code or route cache is stale.

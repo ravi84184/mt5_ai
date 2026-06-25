@@ -31,10 +31,10 @@ class FixRoutesCommand extends Command
 
         $files = [
             'routes/web.php',
-            'routes/dashboard.php',
-            'app/Http/Controllers/Dashboard/DashboardController.php',
-            'app/Http/Controllers/Dashboard/DashboardAuthController.php',
-            'app/Http/Middleware/VerifyDashboardAuth.php',
+            'routes/admin.php',
+            'app/Http/Controllers/Admin/OverviewController.php',
+            'app/Http/Controllers/Admin/AdminAuthController.php',
+            'app/Http/Middleware/VerifyAdminAuth.php',
         ];
 
         $allExist = true;
@@ -54,7 +54,7 @@ class FixRoutesCommand extends Command
 
         $this->newLine();
         $this->info('Cache cleared. Run this in a fresh command to verify routes:');
-        $this->line('  php artisan route:list | grep dashboard');
+        $this->line('  php artisan route:list | grep admin');
         $this->newLine();
         $this->line('Then restart PHP-FPM:');
         $this->line('  sudo systemctl restart php8.5-fpm');

@@ -27,16 +27,16 @@ class DiagnoseMt5Command extends Command
         }
 
         $dashboardRoutes = collect(\Illuminate\Support\Facades\Route::getRoutes()->getRoutes())
-            ->filter(fn ($route) => str_contains($route->uri(), 'dashboard'))
+            ->filter(fn ($route) => str_contains($route->uri(), 'admin'))
             ->count();
 
         if ($dashboardRoutes === 0) {
-            $this->error('Dashboard routes NOT registered (0 found)');
+            $this->error('Admin routes NOT registered (0 found)');
             $this->line('  Run: php artisan mt5:routes-fix');
-            $this->line('  Then: php artisan route:list | grep dashboard');
+            $this->line('  Then: php artisan route:list | grep admin');
             $this->newLine();
         } else {
-            $this->info("Dashboard routes registered: {$dashboardRoutes}");
+            $this->info("Admin routes registered: {$dashboardRoutes}");
             $this->newLine();
         }
 

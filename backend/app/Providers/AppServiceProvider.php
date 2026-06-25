@@ -29,18 +29,19 @@ class AppServiceProvider extends ServiceProvider
             return;
         }
 
-        $hasDashboard = collect(Route::getRoutes()->getRoutes())->contains(
-            fn ($route) => str_contains($route->uri(), 'dashboard')
+        $hasAdmin = collect(Route::getRoutes()->getRoutes())->contains(
+            fn ($route) => str_contains($route->uri(), 'admin')
         );
 
-        if ($hasDashboard) {
+        if ($hasAdmin) {
             return;
         }
 
-        Route::redirect('/', '/dashboard');
+        Route::redirect('/', '/admin');
 
-        Route::prefix('dashboard')
-            ->name('dashboard.')
-            ->group(base_path('routes/dashboard.php'));
+        Route::middleware('web')
+            ->prefix('admin')
+            ->name('admin.')
+            ->group(base_path('routes/admin.php'));
     }
 }

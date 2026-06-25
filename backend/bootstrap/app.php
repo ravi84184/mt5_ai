@@ -15,7 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'mt5.token' => \App\Http\Middleware\VerifyMt5ApiToken::class,
-            'dashboard.auth' => \App\Http\Middleware\VerifyDashboardAuth::class,
+            'admin.auth' => \App\Http\Middleware\VerifyAdminAuth::class,
+            'dashboard.auth' => \App\Http\Middleware\VerifyAdminAuth::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

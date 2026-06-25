@@ -56,26 +56,26 @@ API base URL: `http://127.0.0.1:8000/api`
 - **Hostinger shared hosting:** see [DEPLOYMENT_HOSTINGER.md](DEPLOYMENT_HOSTINGER.md)
 - **No signals?** see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
-### 4. Dashboard
+### 4. Super Admin
 
-Web UI at `/dashboard` (password-protected). **No npm required** — uses plain PHP Blade + CSS.
+Full control panel at `/admin` (password-protected). Manages accounts, AI providers, symbols, signals, trades, queue, and system config.
 
 ```env
-DASHBOARD_PASSWORD=your-secure-password
+ADMIN_PASSWORD=your-secure-password
 ```
 
-After deploying code to the server:
+Legacy `DASHBOARD_PASSWORD` still works if `ADMIN_PASSWORD` is not set.
+
+After deploy:
 
 ```bash
-cd /var/www/mt5_ai/backend
-git pull
-composer install --no-dev --optimize-autoloader
-php artisan config:clear
-php artisan route:clear
-php artisan view:clear
+cd backend
+php artisan migrate --force
+php artisan optimize:clear
+sudo systemctl restart php8.5-fpm
 ```
 
-Open `https://your-domain.com/dashboard` and sign in.
+Open `https://your-domain.com/admin`
 
 ## API Endpoints
 
@@ -115,7 +115,7 @@ TRADING_SYMBOLS=BTCUSDT,ETHUSDT,PAXGUSDT,XAUUSD,EURUSD,GBPUSD
 - [x] M4 — MT5 auto execution
 - [x] M5 — Trade synchronization
 - [x] M6 — AI position management
-- [x] M7 — Analytics dashboard (Phase 2)
+- [x] M7 — Super Admin panel (accounts, trades, system, queue)
 - [ ] M8 — Multi-AI consensus (Phase 2)
 
 ## Risk Warning
