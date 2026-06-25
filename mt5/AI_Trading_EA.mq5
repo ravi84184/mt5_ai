@@ -19,8 +19,12 @@ input int      InpMaxOpenTrades   = 3;
 input string   InpSymbols         = "XAUUSD,EURUSD,GBPUSD";
 input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M15;
 input int      InpMagicNumber     = 20260625;
+input bool     InpShowButtons     = true;   // Show "Ask AI" buttons on chart
 
 //--- Globals
+#define BTN_ASK_AI    "AiBtn_AskEntry"
+#define BTN_MANAGE    "AiBtn_ManagePos"
+
 CTrade         trade;
 datetime       g_lastBarTime = 0;
 string         g_symbols[];
@@ -46,6 +50,9 @@ int OnInit()
    // Send market data immediately (don't wait for next candle)
    SendMarketData();
 
+   if(InpShowButtons)
+      CreateManualButtons();
+
    return INIT_SUCCEEDED;
 }
 
@@ -53,6 +60,66 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   DeleteManualButtons();
+}
+
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id != CHARTEVENT_OBJECT_CLICK)
+      return;
+
+   if(sparam == BTN_ASK_AI)
+   {
+      ObjectSetInteger(0, BTN_ASK_AI, OBJPROP_STATE, false);
+      ChartRedraw();
+      Print("=== Manual AI entry analysis requested ===");
+      SendMarketData();
+   }
+   else if(sparam == BTN_MANAGE)
+   {
+      ObjectSetInteger(0, BTN_MANAGE, OBJPROP_STATE, false);
+      ChartRedraw();
+      Print("=== Manual AI position management requested ===");
+      SendOpenPositionsAnalysis();
+   }
+}
+
+//+------------------------------------------------------------------+
+void CreateManualButtons()
+{
+   CreateChartButton(BTN_ASK_AI, "Ask AI Entry", 10, 30, 120, 28);
+   CreateChartButton(BTN_MANAGE, "Manage Open", 140, 30, 120, 28);
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+void DeleteManualButtons()
+{
+   ObjectDelete(0, BTN_ASK_AI);
+   ObjectDelete(0, BTN_MANAGE);
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+void CreateChartButton(string name, string text, int x, int y, int w, int h)
+{
+   if(ObjectFind(0, name) >= 0)
+      ObjectDelete(0, name);
+
+   ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, clrDodgerBlue);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, clrNavy);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
 }
 
 //+------------------------------------------------------------------+

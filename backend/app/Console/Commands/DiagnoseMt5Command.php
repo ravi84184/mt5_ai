@@ -22,11 +22,20 @@ class DiagnoseMt5Command extends Command
         $this->line('Config:');
         $this->table(['Key', 'Value'], [
             ['APP_URL', config('app.url')],
+            ['APP_TIMEZONE', config('app.timezone')],
             ['QUEUE_CONNECTION', config('queue.default')],
             ['AI_PROVIDER', config('trading.ai.provider')],
             ['OPENAI_API_KEY', $this->mask(config('trading.ai.openai.api_key'))],
             ['MT5_API_TOKEN', $this->mask(config('trading.api_token'))],
+        ]);
+
+        $this->newLine();
+        $this->line('Risk config (server time: '.now()->format('H:i T').'):');
+        $this->table(['Key', 'Value'], [
             ['MIN_CONFIDENCE', config('trading.risk.min_confidence')],
+            ['MAX_OPEN_TRADES', config('trading.risk.max_open_trades')],
+            ['TRADING_SESSIONS', config('trading.risk.trading_sessions')],
+            ['OPEN trades in DB', \App\Models\Trade::where('status', 'OPEN')->count()],
         ]);
 
         $this->newLine();
@@ -58,15 +67,17 @@ class DiagnoseMt5Command extends Command
             $this->table(['id', 'mt5_login', 'balance', 'updated_at'], $accounts->toArray());
         }
 
-        $latestSignals = Signal::latest()->take(5)->get(['id', 'account_id', 'symbol', 'action', 'confidence', 'status', 'reason', 'created_at']);
+        $latestSignals = Signal::latest()->take(5)->get(['id', 'account_id', 'symbol', 'action', 'confidence', 'status', 'rejection_reason', 'reason', 'created_at']);
         if ($latestSignals->isNotEmpty()) {
             $this->newLine();
             $this->line('Latest signals:');
             $this->table(
-                ['id', 'account_id', 'symbol', 'action', 'confidence', 'status', 'reason', 'created_at'],
+                ['id', 'symbol', 'action', 'conf', 'status', 'rejection_reason', 'created_at'],
                 $latestSignals->map(fn ($s) => [
-                    $s->id, $s->account_id, $s->symbol, $s->action, $s->confidence,
-                    $s->status->value ?? $s->status, \Illuminate\Support\Str::limit($s->reason ?? '', 40), $s->created_at,
+                    $s->id, $s->symbol, $s->action, $s->confidence,
+                    $s->status->value ?? $s->status,
+                    \Illuminate\Support\Str::limit($s->rejection_reason ?? '-', 50),
+                    $s->created_at,
                 ])->toArray()
             );
         }

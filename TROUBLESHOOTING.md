@@ -190,6 +190,34 @@ In MT5 Market Watch, right-click symbol → Specification → use exact name.
 
 ---
 
+## Manual AI request (no wait for candle)
+
+### Option A — Chart buttons (EA)
+
+Recompile `AI_Trading_EA.mq5` and re-attach to chart. Two buttons appear top-left:
+
+| Button | Action |
+|--------|--------|
+| **Ask AI Entry** | Sends market data now → AI entry signal (BUY/SELL/WAIT) |
+| **Manage Open** | Sends open positions → AI management (HOLD/CLOSE/MOVE_SL) |
+
+Experts tab should show: `Manual AI entry analysis requested` then `Market data sent: {"status":"accepted"}`.
+
+Wait ~30–60 seconds for queue + AI, then EA polls signal automatically.
+
+Hide buttons: set EA input `InpShowButtons = false`.
+
+### Option B — One-click Script
+
+1. Copy `mt5/AI_Manual_Ask.mq5` to `MQL5/Scripts/`
+2. Compile in MetaEditor
+3. Navigator → **Scripts → AI_Manual_Ask** → drag onto chart
+4. Set API URL, token, symbols → OK
+
+Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
+
+---
+
 ## Quick checklist
 
 - [ ] AutoTrading ON in MT5

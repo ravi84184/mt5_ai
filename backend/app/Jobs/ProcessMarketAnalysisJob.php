@@ -90,8 +90,11 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                 'ai_provider' => $provider,
             ]);
 
-            if (! $riskService->canAcceptSignal($account, $signal)) {
-                $signal->update(['status' => SignalStatus::Rejected]);
+            if ($rejection = $riskService->getRejectionReason($account, $signal)) {
+                $signal->update([
+                    'status' => SignalStatus::Rejected,
+                    'rejection_reason' => $rejection,
+                ]);
             }
         }
     }

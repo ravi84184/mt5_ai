@@ -48,6 +48,7 @@ API base URL: `http://127.0.0.1:8000/api`
    - `InpApiToken` — must match `MT5_API_TOKEN` in `.env`
    - `InpSymbols` — comma-separated symbols
    - `InpMinConfidence` — default 80
+6. **Manual AI request:** click **Ask AI Entry** on chart, or run script `AI_Manual_Ask.mq5`
 
 ### 3. Production
 

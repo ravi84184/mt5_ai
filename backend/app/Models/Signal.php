@@ -19,6 +19,7 @@ class Signal extends Model
         'confidence',
         'reason',
         'status',
+        'rejection_reason',
         'ticket',
         'ai_provider',
     ];

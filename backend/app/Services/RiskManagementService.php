@@ -11,14 +11,19 @@ class RiskManagementService
 {
     public function canAcceptSignal(Account $account, Signal $signal): bool
     {
+        return $this->getRejectionReason($account, $signal) === null;
+    }
+
+    public function getRejectionReason(Account $account, Signal $signal): ?string
+    {
         $config = config('trading.risk');
 
         if ($signal->confidence < $config['min_confidence']) {
-            return false;
+            return "Confidence {$signal->confidence} below minimum {$config['min_confidence']}";
         }
 
         if (! in_array($signal->action, ['BUY', 'SELL'], true)) {
-            return false;
+            return "Action {$signal->action} is not tradable (only BUY/SELL)";
         }
 
         $openTrades = Trade::where('account_id', $account->id)
@@ -26,18 +31,20 @@ class RiskManagementService
             ->count();
 
         if ($openTrades >= $config['max_open_trades']) {
-            return false;
+            return "Max open trades reached ({$openTrades}/{$config['max_open_trades']})";
         }
 
         if (! $this->withinTradingSession($config['trading_sessions'])) {
-            return false;
+            $now = Carbon::now()->format('H:i T');
+
+            return "Outside trading session (server time {$now}, allowed: {$config['trading_sessions']})";
         }
 
         if (! $this->withinDailyLimits($account, $config)) {
-            return false;
+            return 'Daily loss/drawdown limit reached';
         }
 
-        return true;
+        return null;
     }
 
     private function withinTradingSession(string $sessions): bool
