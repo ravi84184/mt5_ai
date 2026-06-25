@@ -4,16 +4,16 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', 'Dashboard') — MT5 AI</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}">
 </head>
-<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-    <div class="flex min-h-screen">
-        <aside class="relative hidden w-56 shrink-0 border-r border-slate-800 bg-slate-900 lg:block">
-            <div class="border-b border-slate-800 px-5 py-5">
-                <p class="text-sm font-semibold tracking-wide text-white">MT5 AI</p>
-                <p class="text-xs text-slate-400">Trading Dashboard</p>
+<body>
+    <div class="layout">
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <strong>MT5 AI</strong>
+                <span>Trading Dashboard</span>
             </div>
-            <nav class="space-y-1 p-3">
+            <nav class="sidebar-nav">
                 @foreach([
                     ['route' => 'dashboard.index', 'label' => 'Overview'],
                     ['route' => 'dashboard.accounts', 'label' => 'Accounts'],
@@ -21,32 +21,29 @@
                     ['route' => 'dashboard.trades', 'label' => 'Trades'],
                     ['route' => 'dashboard.ai-logs', 'label' => 'AI Logs'],
                 ] as $item)
-                    <a href="{{ route($item['route']) }}"
-                       class="block rounded-lg px-3 py-2 text-sm {{ request()->routeIs($item['route'].'*') ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800/60 hover:text-white' }}">
+                    <a href="{{ route($item['route']) }}" class="{{ request()->routeIs($item['route'].'*') ? 'active' : '' }}">
                         {{ $item['label'] }}
                     </a>
                 @endforeach
             </nav>
-            <form method="POST" action="{{ route('dashboard.logout') }}" class="absolute bottom-4 left-3 right-3 lg:w-48">
+            <form method="POST" action="{{ route('dashboard.logout') }}" class="sidebar-logout">
                 @csrf
-                <button type="submit" class="w-full rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800">
-                    Log out
-                </button>
+                <button type="submit" class="btn btn-outline" style="width:100%">Log out</button>
             </form>
         </aside>
 
-        <div class="flex min-w-0 flex-1 flex-col">
-            <header class="border-b border-slate-800 bg-slate-900/80 px-4 py-4 backdrop-blur lg:px-8">
-                <div class="flex items-center justify-between gap-4">
+        <div class="main">
+            <header class="header">
+                <div class="header-top">
                     <div>
-                        <h1 class="text-lg font-semibold text-white">@yield('heading')</h1>
+                        <h1>@yield('heading')</h1>
                         @hasSection('subheading')
-                            <p class="text-sm text-slate-400">@yield('subheading')</p>
+                            <p>@yield('subheading')</p>
                         @endif
                     </div>
-                    <p class="text-xs text-slate-500">{{ now()->format('M j, Y H:i T') }}</p>
+                    <p class="header-time">{{ now()->format('M j, Y H:i T') }}</p>
                 </div>
-                <nav class="mt-3 flex gap-2 overflow-x-auto lg:hidden">
+                <nav class="mobile-nav">
                     @foreach([
                         ['route' => 'dashboard.index', 'label' => 'Overview'],
                         ['route' => 'dashboard.accounts', 'label' => 'Accounts'],
@@ -54,15 +51,14 @@
                         ['route' => 'dashboard.trades', 'label' => 'Trades'],
                         ['route' => 'dashboard.ai-logs', 'label' => 'AI Logs'],
                     ] as $item)
-                        <a href="{{ route($item['route']) }}"
-                           class="whitespace-nowrap rounded-full px-3 py-1 text-xs {{ request()->routeIs($item['route'].'*') ? 'bg-slate-700 text-white' : 'bg-slate-800 text-slate-300' }}">
+                        <a href="{{ route($item['route']) }}" class="{{ request()->routeIs($item['route'].'*') ? 'active' : '' }}">
                             {{ $item['label'] }}
                         </a>
                     @endforeach
                 </nav>
             </header>
 
-            <main class="flex-1 px-4 py-6 lg:px-8">
+            <main class="content">
                 @yield('content')
             </main>
         </div>

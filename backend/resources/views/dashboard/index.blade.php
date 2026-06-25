@@ -6,17 +6,17 @@
 
 @section('content')
     @if ($stats['failed_jobs'] > 0 || $stats['queued_jobs'] > 10)
-        <div class="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        <div class="alert">
             @if ($stats['failed_jobs'] > 0)
-                <p>{{ $stats['failed_jobs'] }} failed queue job(s) — run <code class="rounded bg-slate-800 px-1">php artisan queue:failed</code></p>
+                <p>{{ $stats['failed_jobs'] }} failed queue job(s) — run <code>php artisan queue:failed</code></p>
             @endif
             @if ($stats['queued_jobs'] > 10)
-                <p class="mt-1">{{ $stats['queued_jobs'] }} jobs queued — ensure queue worker is running.</p>
+                <p style="margin-top:0.5rem">{{ $stats['queued_jobs'] }} jobs queued — ensure queue worker is running.</p>
             @endif
         </div>
     @endif
 
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid-stats">
         @foreach([
             ['label' => 'Accounts', 'value' => $stats['accounts']],
             ['label' => 'Open Trades', 'value' => $stats['open_trades']],
@@ -27,105 +27,93 @@
             ['label' => 'Failed Jobs', 'value' => $stats['failed_jobs']],
             ['label' => 'AI Calls Today', 'value' => $stats['ai_logs_today']],
         ] as $card)
-            <div class="rounded-xl border border-slate-800 bg-slate-900 p-4">
-                <p class="text-xs uppercase tracking-wide text-slate-500">{{ $card['label'] }}</p>
-                <p class="mt-2 text-2xl font-semibold text-white">{{ number_format($card['value']) }}</p>
+            <div class="card">
+                <p class="card-label">{{ $card['label'] }}</p>
+                <p class="card-value">{{ number_format($card['value']) }}</p>
             </div>
         @endforeach
     </div>
 
-    <div class="mt-8 grid gap-6 xl:grid-cols-2">
-        <section class="rounded-xl border border-slate-800 bg-slate-900">
-            <div class="border-b border-slate-800 px-4 py-3">
-                <h2 class="font-medium text-white">System Config</h2>
-            </div>
-            <dl class="divide-y divide-slate-800 px-4">
-                @foreach($config as $key => $value)
-                    <div class="flex justify-between gap-4 py-3 text-sm">
-                        <dt class="text-slate-400">{{ str_replace('_', ' ', ucfirst($key)) }}</dt>
-                        <dd class="text-right text-slate-200">{{ $value }}</dd>
-                    </div>
-                @endforeach
-            </dl>
-            @if ($latestSnapshot)
-                <div class="border-t border-slate-800 px-4 py-3 text-sm text-slate-400">
-                    Latest snapshot:
-                    <span class="text-slate-200">{{ $latestSnapshot->symbol }}</span>
-                    for account
-                    <span class="text-slate-200">{{ $latestSnapshot->account?->mt5_login ?? $latestSnapshot->account_id }}</span>
+    <div class="grid-2">
+        <section class="panel">
+            <div class="panel-header"><h2>System Config</h2></div>
+            @foreach($config as $key => $value)
+                <div class="dl-row">
+                    <dt>{{ str_replace('_', ' ', ucfirst($key)) }}</dt>
+                    <dd>{{ $value }}</dd>
+                </div>
+            @endforeach
+            <div class="panel-footer">
+                @if ($latestSnapshot)
+                    Latest snapshot: <strong>{{ $latestSnapshot->symbol }}</strong>
+                    for account <strong>{{ $latestSnapshot->account?->mt5_login ?? $latestSnapshot->account_id }}</strong>
                     at {{ $latestSnapshot->created_at }}
-                </div>
-            @else
-                <div class="border-t border-slate-800 px-4 py-3 text-sm text-slate-500">
+                @else
                     No market snapshots yet — MT5 has not sent data.
-                </div>
-            @endif
-        </section>
-
-        <section class="rounded-xl border border-slate-800 bg-slate-900">
-            <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-                <h2 class="font-medium text-white">Recent Signals</h2>
-                <a href="{{ route('dashboard.signals') }}" class="text-xs text-sky-400 hover:text-sky-300">View all</a>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="text-left text-xs uppercase text-slate-500">
-                        <tr>
-                            <th class="px-4 py-2">Symbol</th>
-                            <th class="px-4 py-2">Action</th>
-                            <th class="px-4 py-2">Conf</th>
-                            <th class="px-4 py-2">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-800">
-                        @forelse ($recentSignals as $signal)
-                            <tr>
-                                <td class="px-4 py-3 text-white">{{ $signal->symbol }}</td>
-                                <td class="px-4 py-3">@include('components.status-badge', ['status' => $signal->action])</td>
-                                <td class="px-4 py-3 text-slate-300">{{ $signal->confidence }}%</td>
-                                <td class="px-4 py-3">@include('components.status-badge', ['status' => $signal->status])</td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="4" class="px-4 py-6 text-center text-slate-500">No signals yet</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                @endif
             </div>
         </section>
-    </div>
 
-    <section class="mt-6 rounded-xl border border-slate-800 bg-slate-900">
-        <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <h2 class="font-medium text-white">Recent Trades</h2>
-            <a href="{{ route('dashboard.trades') }}" class="text-xs text-sky-400 hover:text-sky-300">View all</a>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead class="text-left text-xs uppercase text-slate-500">
+        <section class="panel">
+            <div class="panel-header">
+                <h2>Recent Signals</h2>
+                <a href="{{ route('dashboard.signals') }}">View all</a>
+            </div>
+            <table>
+                <thead>
                     <tr>
-                        <th class="px-4 py-2">Ticket</th>
-                        <th class="px-4 py-2">Symbol</th>
-                        <th class="px-4 py-2">Type</th>
-                        <th class="px-4 py-2">Profit</th>
-                        <th class="px-4 py-2">Status</th>
+                        <th>Symbol</th>
+                        <th>Action</th>
+                        <th>Conf</th>
+                        <th>Status</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
-                    @forelse ($recentTrades as $trade)
+                <tbody>
+                    @forelse ($recentSignals as $signal)
                         <tr>
-                            <td class="px-4 py-3 font-mono text-slate-300">{{ $trade->ticket }}</td>
-                            <td class="px-4 py-3 text-white">{{ $trade->symbol }}</td>
-                            <td class="px-4 py-3">@include('components.status-badge', ['status' => $trade->type])</td>
-                            <td class="px-4 py-3 {{ ($trade->profit ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400' }}">
-                                {{ $trade->profit !== null ? number_format((float) $trade->profit, 2) : '—' }}
-                            </td>
-                            <td class="px-4 py-3">@include('components.status-badge', ['status' => $trade->status])</td>
+                            <td>{{ $signal->symbol }}</td>
+                            <td>@include('components.status-badge', ['status' => $signal->action])</td>
+                            <td>{{ $signal->confidence }}%</td>
+                            <td>@include('components.status-badge', ['status' => $signal->status])</td>
                         </tr>
                     @empty
-                        <tr><td colspan="5" class="px-4 py-6 text-center text-slate-500">No trades yet</td></tr>
+                        <tr><td colspan="4" class="empty">No signals yet</td></tr>
                     @endforelse
                 </tbody>
             </table>
+        </section>
+    </div>
+
+    <section class="panel" style="margin-top:1.5rem">
+        <div class="panel-header">
+            <h2>Recent Trades</h2>
+            <a href="{{ route('dashboard.trades') }}">View all</a>
         </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Symbol</th>
+                    <th>Type</th>
+                    <th>Profit</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($recentTrades as $trade)
+                    <tr>
+                        <td class="text-mono text-muted">{{ $trade->ticket }}</td>
+                        <td>{{ $trade->symbol }}</td>
+                        <td>@include('components.status-badge', ['status' => $trade->type])</td>
+                        <td class="{{ ($trade->profit ?? 0) >= 0 ? 'text-profit' : 'text-loss' }}">
+                            {{ $trade->profit !== null ? number_format((float) $trade->profit, 2) : '—' }}
+                        </td>
+                        <td>@include('components.status-badge', ['status' => $trade->status])</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="5" class="empty">No trades yet</td></tr>
+                @endforelse
+            </tbody>
+        </table>
     </section>
 @endsection

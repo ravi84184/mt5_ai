@@ -58,18 +58,24 @@ API base URL: `http://127.0.0.1:8000/api`
 
 ### 4. Dashboard
 
-Web UI at `/dashboard` (password-protected):
+Web UI at `/dashboard` (password-protected). **No npm required** — uses plain PHP Blade + CSS.
 
 ```env
 DASHBOARD_PASSWORD=your-secure-password
 ```
 
+After deploying code to the server:
+
 ```bash
-npm install && npm run build   # compile Tailwind assets
-php artisan serve
+cd /var/www/mt5_ai/backend
+git pull
+composer install --no-dev --optimize-autoloader
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
 ```
 
-Open `http://127.0.0.1:8000/dashboard` and sign in.
+Open `https://your-domain.com/dashboard` and sign in.
 
 ## API Endpoints
 

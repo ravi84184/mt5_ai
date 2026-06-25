@@ -244,6 +244,33 @@ Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
 
 ---
 
+## Dashboard 404 at `/dashboard`
+
+If `https://mt5-ai.niksofts.com/up` works but `/dashboard` returns 404, the server does not have the latest code or route cache is stale.
+
+**On the server (SSH):**
+
+```bash
+cd /var/www/mt5_ai/backend
+git pull origin main
+composer install --no-dev --optimize-autoloader
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
+```
+
+**In `.env` add:**
+
+```env
+DASHBOARD_PASSWORD=your-secure-password
+```
+
+Then open `/dashboard` — you should see the login page (not 404).
+
+**No npm needed.** The dashboard is plain Laravel Blade + `public/css/dashboard.css`.
+
+---
+
 ## Common fixes
 
 ```bash
