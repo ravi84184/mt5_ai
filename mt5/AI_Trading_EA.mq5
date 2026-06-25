@@ -9,8 +9,8 @@
 #include <Trade/Trade.mqh>
 
 //--- Inputs
-input string   InpApiBaseUrl      = "http://127.0.0.1:8000/api";
-input string   InpApiToken        = "change-me-in-production";
+input string   InpApiBaseUrl      = "https://mt5-ai.niksofts.com/api";
+input string   InpApiToken        = "f346b6da84c7884e912b50ad257f40c880398071fcf739f13ea0327ceb9fa42b";
 input int      InpPollIntervalSec = 7;
 input int      InpCandleCount     = 50;
 input double   InpMinConfidence   = 80.0;
@@ -41,6 +41,11 @@ int OnInit()
 
    EventSetTimer(InpPollIntervalSec);
    Print("AI Trading EA started. Symbols: ", g_symbolCount);
+   Print("API: ", InpApiBaseUrl, " | Account: ", AccountInfoInteger(ACCOUNT_LOGIN));
+
+   // Send market data immediately (don't wait for next candle)
+   SendMarketData();
+
    return INIT_SUCCEEDED;
 }
 
@@ -119,6 +124,8 @@ void SendMarketData()
    string response;
    if(HttpPost(InpApiBaseUrl + "/market-data", json, response))
       Print("Market data sent: ", response);
+   else
+      Print("Market data FAILED. Response: ", response);
 }
 
 //+------------------------------------------------------------------+
@@ -261,8 +268,11 @@ void PollSignals()
    if(success)
    {
       ticket = trade.ResultOrder();
+      Print("Trade executed: ", action, " ", symbol, " lot=", lot, " ticket=", ticket);
       NotifySignalExecuted(signalId, ticket, symbol, action, lot, entry);
    }
+   else
+      Print("Trade FAILED: ", action, " ", symbol, " error=", GetLastError(), " retcode=", trade.ResultRetcode());
 }
 
 //+------------------------------------------------------------------+
@@ -469,6 +479,8 @@ bool HttpPost(string url, string body, string &response)
    }
 
    response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   if(res != 200 && res != 201 && res != 202)
+      Print("HTTP POST ", res, " for ", url, " — ", response);
    return res == 200 || res == 201 || res == 202;
 }
 
@@ -487,6 +499,8 @@ bool HttpGet(string url, string &response)
    }
 
    response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   if(res != 200)
+      Print("HTTP GET ", res, " for ", url, " — ", response);
    return res == 200;
 }
 

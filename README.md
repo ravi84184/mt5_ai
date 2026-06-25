@@ -53,6 +53,7 @@ API base URL: `http://127.0.0.1:8000/api`
 
 - **AWS (EC2, MySQL on server):** see [DEPLOYMENT_AWS.md](DEPLOYMENT_AWS.md)
 - **Hostinger shared hosting:** see [DEPLOYMENT_HOSTINGER.md](DEPLOYMENT_HOSTINGER.md)
+- **No signals?** see [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ## API Endpoints
 

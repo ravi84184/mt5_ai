@@ -322,7 +322,7 @@ sudo mkdir -p /var/www
 sudo chown ubuntu:ubuntu /var/www
 cd /var/www
 
-git clone https://github.com/YOUR_USER/mt5_ai.git
+git clone https://github.com/ravi84184/mt5_ai.git
 cd mt5_ai/backend
 ```
 
@@ -356,7 +356,7 @@ Paste:
 ```nginx
 server {
     listen 80;
-    server_name api.yourdomain.com;
+    server_name mt5-ai.niksofts.com;
     root /var/www/mt5_ai/backend/public;
 
     add_header X-Frame-Options "SAMEORIGIN";
@@ -413,7 +413,7 @@ APP_NAME="MT5 AI Trading"
 APP_ENV=production
 APP_KEY=
 APP_DEBUG=false
-APP_URL=https://api.yourdomain.com
+APP_URL=https://mt5-ai.niksofts.com
 
 LOG_CHANNEL=stack
 LOG_LEVEL=error
@@ -424,14 +424,14 @@ DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_DATABASE=mt5_ai
 DB_USERNAME=mt5user
-DB_PASSWORD=your_strong_db_password
+DB_PASSWORD=R@vi84184
 
 SESSION_DRIVER=database
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 
 # MT5 API
-MT5_API_TOKEN=your-very-long-random-secret-token
+MT5_API_TOKEN=f346b6da84c7884e912b50ad257f40c880398071fcf739f13ea0327ceb9fa42b
 
 # Trading
 TRADING_SYMBOLS=BTCUSDT,ETHUSDT,PAXGUSDT,XAUUSD,EURUSD,GBPUSD
@@ -531,18 +531,112 @@ sudo supervisorctl restart mt5-ai-worker:*
 
 ## 15. Configure Domain & SSL
 
-### DNS (Route 53 or any registrar)
+### 15.1 Get your EC2 public IP (Elastic IP)
 
-| Type | Name  | Value          |
-| ---- | ----- | -------------- |
-| A    | `api` | EC2 Elastic IP |
+AWS Console → **EC2 → Elastic IPs** (or your instance details).
 
-### SSL with Certbot
+Note the **Elastic IP**, e.g. `3.110.45.67`.
+
+> Use an **Elastic IP**, not the temporary IP — the temporary IP changes when you stop/start the instance.
+
+Security group must allow **HTTP (80)** and **HTTPS (443)** from `0.0.0.0/0`.
+
+---
+
+### 15.2 Connect Hostinger subdomain to AWS EC2
+
+Your domain DNS stays on **Hostinger**. You only point the subdomain to AWS — no need for Route 53.
+
+#### Step 1 — Open Hostinger DNS
+
+1. Log in to [Hostinger hPanel](https://hpanel.hostinger.com)
+2. Go to **Domains** → select your domain (e.g. `niksofts.com`)
+3. Open **DNS / DNS Zone / Manage DNS records**
+
+#### Step 2 — Add an A record
+
+| Field                 | Value                         | Example           |
+| --------------------- | ----------------------------- | ----------------- |
+| **Type**              | `A`                           | A                 |
+| **Name**              | subdomain only (not full URL) | `api` or `mt5-ai` |
+| **Points to / Value** | EC2 Elastic IP                | `3.110.45.67`     |
+| **TTL**               | Default (300–14400)           | 3600              |
+
+This creates: `api.yourdomain.com` → your EC2 server.
+
+**Examples:**
+
+| You want              | Name field | Result                |
+| --------------------- | ---------- | --------------------- |
+| `api.niksofts.com`    | `api`      | `api.niksofts.com`    |
+| `mt5-ai.niksofts.com` | `mt5-ai`   | `mt5-ai.niksofts.com` |
+
+> Do **not** enter `https://` or the full domain in the Name field — only the subdomain part.
+
+#### Step 3 — Remove conflicts (if any)
+
+Delete or edit old records for the same subdomain:
+
+- Old **A** record pointing elsewhere
+- **CNAME** on the same name (A and CNAME cannot coexist for one name)
+
+#### Step 4 — Wait for DNS propagation
+
+Usually **5–30 minutes**, sometimes up to 24 hours.
+
+Check from your PC:
+
+```bash
+# Windows PowerShell
+nslookup api.yourdomain.com
+
+# Or
+ping api.yourdomain.com
+```
+
+The IP should match your EC2 Elastic IP.
+
+Online check: [https://dnschecker.org](https://dnschecker.org)
+
+#### Step 5 — Update Nginx on EC2
+
+`server_name` must match your subdomain:
+
+```bash
+sudo nano /etc/nginx/sites-available/mt5-ai
+```
+
+```nginx
+server_name api.yourdomain.com;   # or mt5-ai.yourdomain.com
+```
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Update `.env` on the server:
+
+```env
+APP_URL=https://api.yourdomain.com
+```
+
+```bash
+php artisan config:cache
+```
+
+---
+
+### 15.3 SSL with Certbot (after DNS works)
+
+DNS must resolve to EC2 **before** running Certbot.
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d api.yourdomain.com
+sudo certbot --nginx -d mt5-ai.niksofts.com
 ```
+
+Replace with your actual subdomain (e.g. `-d mt5-ai.niksofts.com`).
 
 Test auto-renewal:
 
@@ -555,6 +649,26 @@ Verify:
 ```bash
 curl https://api.yourdomain.com/up
 ```
+
+---
+
+### 15.4 Flow summary
+
+```
+Hostinger DNS                    AWS EC2
+─────────────                    ───────
+api.yourdomain.com  ──A record──►  3.110.45.67 (Elastic IP)
+                                        │
+                                        ▼
+                                   Nginx + Laravel
+                                   https://api.yourdomain.com/api
+```
+
+**You do NOT need:**
+
+- Route 53 (unless you want to move DNS to AWS later)
+- To change nameservers on Hostinger
+- RDS or any extra AWS DNS service
 
 ---
 
@@ -663,7 +777,7 @@ Paste:
 BACKUP_DIR="/var/backups/mt5_ai"
 DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
-mysqldump -u mt5user -p'your_strong_db_password' mt5_ai | gzip > "$BACKUP_DIR/mt5_ai_$DATE.sql.gz"
+mysqldump -u mt5user -p'R@vi84184' mt5_ai | gzip > "$BACKUP_DIR/mt5_ai_$DATE.sql.gz"
 find $BACKUP_DIR -name "*.sql.gz" -mtime +7 -delete
 ```
 
