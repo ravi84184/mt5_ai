@@ -81,6 +81,7 @@ Open `https://your-domain.com/dashboard` and sign in.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/account-config?account={login}` | EA fetches admin-configured symbols & settings |
 | POST | `/api/market-data` | Receive candles + indicators (async AI) |
 | GET | `/api/signals?account={login}` | Poll pending trade signal |
 | POST | `/api/signals/executed` | Confirm trade execution |

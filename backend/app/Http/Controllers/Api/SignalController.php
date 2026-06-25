@@ -25,6 +25,10 @@ class SignalController extends Controller
             return response()->json(['status' => 'NO_SIGNAL']);
         }
 
+        if (! $account->isTradingEnabled()) {
+            return response()->json(['status' => 'NO_SIGNAL']);
+        }
+
         $signal = Signal::pendingForAccount($account->id)->first();
         if (! $signal) {
             return response()->json(['status' => 'NO_SIGNAL']);

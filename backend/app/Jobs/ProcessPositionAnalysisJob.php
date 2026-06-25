@@ -46,6 +46,12 @@ class ProcessPositionAnalysisJob implements ShouldQueue
             return;
         }
 
+        if (! $account->isTradingEnabled()) {
+            return;
+        }
+
+        $provider = $account->resolvedAiProvider();
+
         $context = [
             'ticket' => $ticket,
             'position' => $this->payload['position'] ?? [],
@@ -58,7 +64,7 @@ class ProcessPositionAnalysisJob implements ShouldQueue
         $startedAt = microtime(true);
 
         try {
-            $decision = AiServiceFactory::make()->analyzePosition($context);
+            $decision = AiServiceFactory::make($provider)->analyzePosition($context);
             $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
         } catch (\Throwable $e) {
             $durationMs = (int) ((microtime(true) - $startedAt) * 1000);

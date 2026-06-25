@@ -17,9 +17,19 @@ class RiskManagementService
     public function getRejectionReason(Account $account, Signal $signal): ?string
     {
         $config = config('trading.risk');
+        $minConfidence = $account->resolvedMinConfidence();
+        $maxOpenTrades = $account->resolvedMaxOpenTrades();
 
-        if ($signal->confidence < $config['min_confidence']) {
-            return "Confidence {$signal->confidence} below minimum {$config['min_confidence']}";
+        if (! $account->isTradingEnabled()) {
+            return 'Trading disabled for this account by admin';
+        }
+
+        if ($account->hasSymbolRestrictions() && ! $account->isSymbolAllowed($signal->symbol)) {
+            return "Symbol {$signal->symbol} is not enabled for this account";
+        }
+
+        if ($signal->confidence < $minConfidence) {
+            return "Confidence {$signal->confidence} below minimum {$minConfidence}";
         }
 
         if (! in_array($signal->action, ['BUY', 'SELL'], true)) {
@@ -30,8 +40,8 @@ class RiskManagementService
             ->where('status', 'OPEN')
             ->count();
 
-        if ($openTrades >= $config['max_open_trades']) {
-            return "Max open trades reached ({$openTrades}/{$config['max_open_trades']})";
+        if ($openTrades >= $maxOpenTrades) {
+            return "Max open trades reached ({$openTrades}/{$maxOpenTrades})";
         }
 
         if (! $this->withinTradingSession($config['trading_sessions'])) {

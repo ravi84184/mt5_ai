@@ -16,10 +16,11 @@ input int      InpCandleCount     = 50;
 input double   InpMinConfidence   = 80.0;
 input double   InpRiskPerTradePct = 1.0;
 input int      InpMaxOpenTrades   = 3;
-input string   InpSymbols         = "XAUUSD,EURUSD,GBPUSD";
+input string   InpSymbols         = "XAUUSD,EURUSD,GBPUSD";  // Fallback if admin has not configured symbols
 input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M15;
 input int      InpMagicNumber     = 20260625;
 input bool     InpShowButtons     = true;   // Show "Ask AI" buttons on chart
+input bool     InpUseServerSymbols = true;  // Use symbols from admin dashboard
 
 //--- Globals
 #define BTN_ASK_AI    "AiBtn_AskEntry"
@@ -29,6 +30,8 @@ CTrade         trade;
 datetime       g_lastBarTime = 0;
 string         g_symbols[];
 int            g_symbolCount = 0;
+bool           g_tradingEnabled = true;
+int            g_configPollCounter = 0;
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -37,9 +40,12 @@ int OnInit()
    trade.SetDeviationInPoints(20);
    trade.SetTypeFilling(ORDER_FILLING_IOC);
 
-   if(!ParseSymbols())
+   if(InpUseServerSymbols)
+      FetchAccountConfig();
+
+   if(!LoadSymbolList(InpUseServerSymbols ? "" : InpSymbols))
    {
-      Print("Failed to parse symbols: ", InpSymbols);
+      Print("Failed to load symbols. Configure symbols in admin dashboard or set InpSymbols.");
       return INIT_FAILED;
    }
 
@@ -125,7 +131,16 @@ void CreateChartButton(string name, string text, int x, int y, int w, int h)
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   PollSignals();
+   g_configPollCounter++;
+   if(InpUseServerSymbols && g_configPollCounter >= 30)
+   {
+      g_configPollCounter = 0;
+      FetchAccountConfig();
+   }
+
+   if(g_tradingEnabled)
+      PollSignals();
+
    PollManagementActions();
 }
 
@@ -153,10 +168,17 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 }
 
 //+------------------------------------------------------------------+
-bool ParseSymbols()
+bool LoadSymbolList(string csv)
 {
+   string source = csv;
+   if(source == "" && g_symbolCount > 0)
+      return true;
+
+   if(source == "")
+      source = InpSymbols;
+
    string parts[];
-   int count = StringSplit(InpSymbols, ',', parts);
+   int count = StringSplit(source, ',', parts);
    if(count <= 0)
       return false;
 
@@ -174,6 +196,86 @@ bool ParseSymbols()
 
    ArrayResize(g_symbols, g_symbolCount);
    return g_symbolCount > 0;
+}
+
+//+------------------------------------------------------------------+
+bool ParseSymbols()
+{
+   return LoadSymbolList(InpSymbols);
+}
+
+//+------------------------------------------------------------------+
+void FetchAccountConfig()
+{
+   string url = InpApiBaseUrl + "/account-config?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
+   string response;
+   if(!HttpGet(url, response))
+   {
+      Print("Account config fetch failed — using EA fallback symbols");
+      return;
+   }
+
+   g_tradingEnabled = JsonGetBool(response, "trading_enabled", true);
+
+   string symbolsCsv = JsonGetSymbolsCsv(response);
+   if(symbolsCsv != "")
+   {
+      if(LoadSymbolList(symbolsCsv))
+         Print("Symbols loaded from server: ", symbolsCsv);
+      else
+         Print("Server returned symbols but parsing failed: ", symbolsCsv);
+   }
+   else
+   {
+      Print("No symbols configured in admin dashboard yet — set symbols at /dashboard/accounts");
+   }
+
+   Print("Account config: trading=", g_tradingEnabled ? "ON" : "OFF",
+         " | provider=", JsonGetString(response, "ai_provider"),
+         " | symbols=", g_symbolCount);
+}
+
+//+------------------------------------------------------------------+
+string JsonGetSymbolsCsv(string json)
+{
+   int start = StringFind(json, "\"symbols\":[");
+   if(start < 0)
+      return "";
+
+   start = StringFind(json, "[", start);
+   int end = StringFind(json, "]", start);
+   if(start < 0 || end < 0 || end <= start)
+      return "";
+
+   string inner = StringSubstr(json, start + 1, end - start - 1);
+   string result = "";
+   string parts[];
+   int count = StringSplit(inner, ',', parts);
+
+   for(int i = 0; i < count; i++)
+   {
+      string sym = Trim(parts[i]);
+      StringReplace(sym, "\"", "");
+      if(sym == "")
+         continue;
+      if(result != "")
+         result += ",";
+      result += sym;
+   }
+
+   return result;
+}
+
+//+------------------------------------------------------------------+
+bool JsonGetBool(string json, string key, bool defaultValue = false)
+{
+   string searchTrue = "\"" + key + "\":true";
+   string searchFalse = "\"" + key + "\":false";
+   if(StringFind(json, searchTrue) >= 0)
+      return true;
+   if(StringFind(json, searchFalse) >= 0)
+      return false;
+   return defaultValue;
 }
 
 //+------------------------------------------------------------------+

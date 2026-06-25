@@ -32,12 +32,26 @@ class ProcessMarketAnalysisJob implements ShouldQueue
     public function handle(RiskManagementService $riskService): void
     {
         $account = Account::findOrFail($this->accountId);
-        $ai = AiServiceFactory::make();
-        $provider = config('trading.ai.provider');
+
+        if (! $account->isTradingEnabled()) {
+            return;
+        }
+
+        if (! $account->hasSymbolRestrictions()) {
+            Log::info('Skipping AI analysis — no symbols configured for account', [
+                'account_id' => $account->id,
+                'mt5_login' => $account->mt5_login,
+            ]);
+
+            return;
+        }
+
+        $provider = $account->resolvedAiProvider();
+        $ai = AiServiceFactory::make($provider);
 
         foreach ($this->payload['symbols'] ?? [] as $symbolData) {
             $symbol = $symbolData['symbol'] ?? null;
-            if (! $symbol) {
+            if (! $symbol || ! $account->isSymbolAllowed($symbol)) {
                 continue;
             }
 
@@ -63,7 +77,10 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                     'equity' => $account->equity,
                 ],
                 'symbol' => $symbolData,
-                'risk' => config('trading.risk'),
+                'risk' => array_merge(config('trading.risk'), [
+                    'min_confidence' => $account->resolvedMinConfidence(),
+                    'max_open_trades' => $account->resolvedMaxOpenTrades(),
+                ]),
             ];
 
             $systemPrompt = PromptBuilder::entrySystemPrompt();

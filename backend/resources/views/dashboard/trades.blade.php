@@ -31,6 +31,7 @@
                     <th>Status</th>
                     <th>Signal</th>
                     <th>Updated</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -55,9 +56,10 @@
                             @endif
                         </td>
                         <td class="text-dim">{{ $trade->updated_at }}</td>
+                        <td><a href="{{ route('dashboard.trades.edit', $trade) }}">Manage</a></td>
                     </tr>
                 @empty
-                    <tr><td colspan="11" class="empty">No trades found</td></tr>
+                    <tr><td colspan="12" class="empty">No trades found</td></tr>
                 @endforelse
             </tbody>
         </table>

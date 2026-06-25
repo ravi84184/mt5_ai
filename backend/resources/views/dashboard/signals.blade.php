@@ -36,6 +36,7 @@
                     <th>Provider</th>
                     <th>Reason</th>
                     <th>Created</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -52,9 +53,17 @@
                             {{ $signal->rejection_reason ?? $signal->reason ?? '—' }}
                         </td>
                         <td class="text-dim">{{ $signal->created_at }}</td>
+                        <td>
+                            @if (($signal->status->value ?? $signal->status) === 'PENDING')
+                                <form method="POST" action="{{ route('dashboard.signals.cancel', $signal) }}" style="display:inline">
+                                    @csrf
+                                    <button type="submit" class="btn" style="padding:0.2rem 0.5rem;font-size:0.75rem">Cancel</button>
+                                </form>
+                            @endif
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" class="empty">No signals found</td></tr>
+                    <tr><td colspan="10" class="empty">No signals found</td></tr>
                 @endforelse
             </tbody>
         </table>
