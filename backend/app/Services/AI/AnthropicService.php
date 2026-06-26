@@ -44,7 +44,8 @@ class AnthropicService implements AiServiceInterface
             ->post('https://api.anthropic.com/v1/messages', [
                 'model' => config('trading.ai.anthropic.model'),
                 'max_tokens' => 1024,
-                'system' => $system,
+                'temperature' => 0,
+                'system' => $system."\n\nRespond with a single raw JSON object only. No markdown, no code fences, no prose.",
                 'messages' => [
                     ['role' => 'user', 'content' => $user],
                 ],

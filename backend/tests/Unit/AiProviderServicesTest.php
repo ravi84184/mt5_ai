@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\AI\AiJsonParser;
 use App\Services\AI\AiProviderConfig;
 use App\Services\AI\AiServiceFactory;
 use App\Services\AI\AnthropicService;
@@ -34,6 +35,50 @@ class AiProviderServicesTest extends TestCase
         $this->assertSame('BUY', $result['action']);
         $this->assertSame(90, $result['confidence']);
         $this->assertTrue(AiProviderConfig::isConfigured('anthropic'));
+    }
+
+    public function test_anthropic_parses_markdown_wrapped_json(): void
+    {
+        config([
+            'trading.ai.anthropic.api_key' => 'sk-ant-test',
+            'trading.ai.anthropic.model' => 'claude-sonnet-4-20250514',
+        ]);
+
+        Http::fake([
+            'api.anthropic.com/*' => Http::response([
+                'content' => [[
+                    'type' => 'text',
+                    'text' => "Here is my analysis:\n\n```json\n{\"symbol\":\"XAUUSD\",\"action\":\"WAIT\",\"confidence\":55,\"entry_price\":0,\"stop_loss\":0,\"take_profit\":0,\"reason\":\"Choppy range\"}\n```",
+                ]],
+            ]),
+        ]);
+
+        $result = app(AnthropicService::class)->analyzeEntry([
+            'symbol' => ['symbol' => 'XAUUSD'],
+        ]);
+
+        $this->assertSame('WAIT', $result['action']);
+        $this->assertSame(55, $result['confidence']);
+    }
+
+    public function test_json_parser_extracts_object_from_preamble(): void
+    {
+        $parsed = AiJsonParser::parse(
+            'Analysis complete. {"action":"HOLD","reason":"Trend intact"}',
+            'Test'
+        );
+
+        $this->assertSame('HOLD', $parsed['action']);
+    }
+
+    public function test_json_parser_repairs_trailing_commas(): void
+    {
+        $parsed = AiJsonParser::parse(
+            '{"action":"BUY","confidence":80,}',
+            'Test'
+        );
+
+        $this->assertSame('BUY', $parsed['action']);
     }
 
     public function test_gemini_entry_analysis_parses_json_response(): void
