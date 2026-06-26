@@ -30,7 +30,7 @@ class OpenAiService implements AiServiceInterface
     {
         $apiKey = config('trading.ai.openai.api_key');
         if (! $apiKey) {
-            throw new RuntimeException('OPENAI_API_KEY is not configured.');
+            throw new RuntimeException('OpenAI API key is not configured.');
         }
 
         $response = Http::withToken($apiKey)

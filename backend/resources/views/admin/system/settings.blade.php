@@ -45,6 +45,9 @@
                             </option>
                         @endforeach
                     </select>
+                    <p class="text-muted" style="margin:0.25rem 0 0;font-size:0.875rem">
+                        Accounts can override this in Accounts → Edit. Configure the matching API key below.
+                    </p>
                 </div>
 
                 <h3 style="font-size:1rem;margin:1.5rem 0 0.75rem">OpenAI</h3>

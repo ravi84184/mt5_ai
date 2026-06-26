@@ -7,50 +7,67 @@ use RuntimeException;
 
 class GeminiService implements AiServiceInterface
 {
+    use ParsesAiJsonResponse;
+
     public function analyzeEntry(array $context): array
     {
         return $this->chat(
-            PromptBuilder::entrySystemPrompt()."\n\n".PromptBuilder::entryUserPrompt($context),
+            PromptBuilder::entrySystemPrompt(),
+            PromptBuilder::entryUserPrompt($context),
         );
     }
 
     public function analyzePosition(array $context): array
     {
         return $this->chat(
-            PromptBuilder::positionSystemPrompt()."\n\n".PromptBuilder::positionUserPrompt($context),
+            PromptBuilder::positionSystemPrompt(),
+            PromptBuilder::positionUserPrompt($context),
         );
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function chat(string $prompt): array
+    private function chat(string $system, string $user): array
     {
         $apiKey = config('trading.ai.gemini.api_key');
         if (! $apiKey) {
-            throw new RuntimeException('GEMINI_API_KEY is not configured.');
+            throw new RuntimeException('Gemini API key is not configured.');
         }
 
         $model = config('trading.ai.gemini.model');
-        $url = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
+        $url = 'https://generativelanguage.googleapis.com/v1beta/models/'.urlencode($model).':generateContent';
 
-        $response = Http::timeout(120)->post($url, [
-            'contents' => [
-                ['parts' => [['text' => $prompt]]],
-            ],
-            'generationConfig' => [
-                'temperature' => 0.2,
-                'responseMimeType' => 'application/json',
-            ],
-        ]);
+        $response = Http::timeout(120)
+            ->withQueryParameters(['key' => $apiKey])
+            ->post($url, [
+                'systemInstruction' => [
+                    'parts' => [['text' => $system]],
+                ],
+                'contents' => [
+                    ['role' => 'user', 'parts' => [['text' => $user]]],
+                ],
+                'generationConfig' => [
+                    'temperature' => 0.2,
+                    'responseMimeType' => 'application/json',
+                ],
+            ]);
 
-        $response->throw();
-
-        $text = $response->json('candidates.0.content.parts.0.text');
-        if (! is_string($text) || $text === '') {
-            throw new RuntimeException('Gemini returned an empty response.');
+        if ($response->failed()) {
+            throw new RuntimeException(
+                'Gemini API error: '.$response->json('error.message', $response->body())
+            );
         }
 
-        return json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+        $text = $response->json('candidates.0.content.parts.0.text');
+
+        if (! is_string($text)) {
+            $blockReason = $response->json('candidates.0.finishReason');
+            throw new RuntimeException(
+                'Gemini returned an empty response'.($blockReason ? " ({$blockReason})" : '.')
+            );
+        }
+
+        return $this->parseJsonResponse($text, 'Gemini');
     }
 }

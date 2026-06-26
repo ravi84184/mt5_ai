@@ -7,6 +7,8 @@ use RuntimeException;
 
 class AnthropicService implements AiServiceInterface
 {
+    use ParsesAiJsonResponse;
+
     public function analyzeEntry(array $context): array
     {
         return $this->chat(
@@ -30,12 +32,13 @@ class AnthropicService implements AiServiceInterface
     {
         $apiKey = config('trading.ai.anthropic.api_key');
         if (! $apiKey) {
-            throw new RuntimeException('ANTHROPIC_API_KEY is not configured.');
+            throw new RuntimeException('Anthropic API key is not configured.');
         }
 
         $response = Http::withHeaders([
             'x-api-key' => $apiKey,
             'anthropic-version' => '2023-06-01',
+            'content-type' => 'application/json',
         ])
             ->timeout(120)
             ->post('https://api.anthropic.com/v1/messages', [
@@ -47,7 +50,11 @@ class AnthropicService implements AiServiceInterface
                 ],
             ]);
 
-        $response->throw();
+        if ($response->failed()) {
+            throw new RuntimeException(
+                'Anthropic API error: '.$response->json('error.message', $response->body())
+            );
+        }
 
         $blocks = $response->json('content', []);
         $text = collect($blocks)
@@ -55,16 +62,6 @@ class AnthropicService implements AiServiceInterface
             ->pluck('text')
             ->implode('');
 
-        if ($text === '') {
-            throw new RuntimeException('Anthropic returned an empty response.');
-        }
-
-        $text = trim($text);
-        if (str_starts_with($text, '```')) {
-            $text = preg_replace('/^```(?:json)?\s*/i', '', $text);
-            $text = preg_replace('/\s*```$/', '', $text);
-        }
-
-        return json_decode($text, true, 512, JSON_THROW_ON_ERROR);
+        return $this->parseJsonResponse($text, 'Anthropic');
     }
 }

@@ -26,11 +26,13 @@ Look for:
 | No messages at all | EA not running or AutoTrading off |
 
 **Fix 4014:** Tools → Options → Expert Advisors → add:
+
 ```
 https://mt5-ai.niksofts.com
 ```
 
 **EA inputs must match server:**
+
 - `InpApiBaseUrl` = `https://mt5-ai.niksofts.com/api`
 - `InpApiToken` = per-account token from Super Admin (`/admin/accounts` → Generate API token)
 - Legacy: global `MT5_API_TOKEN` in server `.env` still works if set
@@ -57,6 +59,7 @@ curl -X POST https://mt5-ai.niksofts.com/api/market-data -H "Content-Type: appli
 ```
 
 Expected:
+
 - market-data → `{"status":"accepted"}`
 - signals → `{"status":"NO_SIGNAL"}` or a BUY/SELL object
 
@@ -145,8 +148,15 @@ php artisan ai:logs --symbol=XAUUSD --type=entry
 
 Set in **Super Admin → System → Trading settings** (`/admin/system/settings`):
 
-- Default AI provider (OpenAI / Anthropic / Gemini)
-- API key for the provider you use
+| Provider | Admin fields |
+|----------|----------------|
+| **OpenAI (GPT)** | OpenAI API key + model (e.g. `gpt-4o-mini`) |
+| **Anthropic (Claude)** | Anthropic API key + model (e.g. `claude-sonnet-4-20250514`) |
+| **Google (Gemini)** | Gemini API key + model (e.g. `gemini-2.0-flash`) |
+
+1. Set **Default AI provider** (used when an account has no override)
+2. Add the API key for the provider(s) you use
+3. Per account: **Accounts → Edit** → choose OpenAI, Anthropic, or Gemini
 
 Keys are stored encrypted in the database. Leave the key field blank when saving other settings to keep the existing key.
 
@@ -290,6 +300,7 @@ Old `/dashboard` URLs redirect to `/admin` automatically.
 **Login:** `https://mt5-ai.niksofts.com/admin/login`
 
 **Env:**
+
 ```env
 ADMIN_PASSWORD=your-secure-password
 ```

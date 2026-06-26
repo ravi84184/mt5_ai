@@ -45,9 +45,14 @@ class DiagnoseMt5Command extends Command
             ['APP_URL', config('app.url')],
             ['APP_TIMEZONE', config('app.timezone')],
             ['QUEUE_CONNECTION', config('queue.default')],
-            ['AI_PROVIDER', config('trading.ai.provider')],
-            ['OPENAI_API_KEY', $this->mask(config('trading.ai.openai.api_key'))],
-            ['Settings source', 'Super Admin → /admin/system/settings (DB overrides .env)'],
+            ['Default AI provider', config('trading.ai.provider')],
+            ['OpenAI key', $this->mask(config('trading.ai.openai.api_key'))],
+            ['Anthropic key', $this->mask(config('trading.ai.anthropic.api_key'))],
+            ['Gemini key', $this->mask(config('trading.ai.gemini.api_key'))],
+            ['OpenAI model', config('trading.ai.openai.model')],
+            ['Anthropic model', config('trading.ai.anthropic.model')],
+            ['Gemini model', config('trading.ai.gemini.model')],
+            ['Settings source', 'Super Admin → /admin/system/settings'],
             ['MT5_API_TOKEN', $this->mask(config('trading.api_token'))],
         ]);
 

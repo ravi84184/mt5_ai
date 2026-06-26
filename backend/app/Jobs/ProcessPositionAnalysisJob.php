@@ -68,7 +68,7 @@ class ProcessPositionAnalysisJob implements ShouldQueue
         $startedAt = microtime(true);
 
         try {
-            $decision = AiServiceFactory::make($provider)->analyzePosition($context);
+            $decision = AiServiceFactory::makeConfigured($provider)->analyzePosition($context);
             $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
         } catch (\Throwable $e) {
             $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
@@ -82,6 +82,7 @@ class ProcessPositionAnalysisJob implements ShouldQueue
                 $account->id,
                 $symbol,
                 $ticket,
+                $provider,
             );
             Log::error('AI position analysis failed', [
                 'account_id' => $account->id,
@@ -103,6 +104,7 @@ class ProcessPositionAnalysisJob implements ShouldQueue
             null,
             $symbol,
             $ticket,
+            $provider,
         );
 
         $action = TradeManagementAction::tryFromMixed($decision['action'] ?? 'HOLD')

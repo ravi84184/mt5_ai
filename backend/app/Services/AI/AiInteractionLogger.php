@@ -21,13 +21,16 @@ class AiInteractionLogger
         ?int $signalId = null,
         ?string $symbol = null,
         ?int $ticket = null,
+        ?string $provider = null,
     ): AiInteractionLog {
+        $provider = AiProviderConfig::normalize($provider ?? config('trading.ai.provider'));
+
         return AiInteractionLog::create([
             'account_id' => $accountId,
             'signal_id' => $signalId,
             'analysis_type' => $analysisType,
-            'provider' => config('trading.ai.provider'),
-            'model' => self::resolveModel(),
+            'provider' => $provider,
+            'model' => AiProviderConfig::model($provider),
             'symbol' => $symbol,
             'ticket' => $ticket,
             'input_json' => $context,
@@ -52,12 +55,15 @@ class AiInteractionLogger
         ?int $accountId = null,
         ?string $symbol = null,
         ?int $ticket = null,
+        ?string $provider = null,
     ): AiInteractionLog {
+        $provider = AiProviderConfig::normalize($provider ?? config('trading.ai.provider'));
+
         return AiInteractionLog::create([
             'account_id' => $accountId,
             'analysis_type' => $analysisType,
-            'provider' => config('trading.ai.provider'),
-            'model' => self::resolveModel(),
+            'provider' => $provider,
+            'model' => AiProviderConfig::model($provider),
             'symbol' => $symbol,
             'ticket' => $ticket,
             'input_json' => $context,
@@ -67,17 +73,5 @@ class AiInteractionLogger
             'error_message' => $errorMessage,
             'duration_ms' => $durationMs,
         ]);
-    }
-
-    private static function resolveModel(): ?string
-    {
-        $provider = config('trading.ai.provider');
-
-        return match ($provider) {
-            'openai', 'gpt' => config('trading.ai.openai.model'),
-            'anthropic', 'claude' => config('trading.ai.anthropic.model'),
-            'gemini', 'google' => config('trading.ai.gemini.model'),
-            default => null,
-        };
     }
 }

@@ -51,7 +51,18 @@ class ProcessMarketAnalysisJob implements ShouldQueue
         }
 
         $provider = $account->resolvedAiProvider();
-        $ai = AiServiceFactory::make($provider);
+
+        try {
+            $ai = AiServiceFactory::makeConfigured($provider);
+        } catch (\InvalidArgumentException $e) {
+            Log::error('AI provider not configured', [
+                'account_id' => $account->id,
+                'provider' => $provider,
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
 
         foreach ($this->payload['symbols'] ?? [] as $symbolData) {
             $symbol = $symbolData['symbol'] ?? null;
@@ -105,6 +116,8 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                     $durationMs,
                     $account->id,
                     $symbol,
+                    null,
+                    $provider,
                 );
                 Log::error('AI entry analysis failed', [
                     'account_id' => $account->id,
@@ -139,6 +152,8 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                 $account->id,
                 $signal->id,
                 $signal->symbol,
+                null,
+                $provider,
             );
 
             if ($rejection = $riskService->getRejectionReason($account, $signal)) {

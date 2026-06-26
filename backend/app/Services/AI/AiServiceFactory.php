@@ -8,13 +8,21 @@ class AiServiceFactory
 {
     public static function make(?string $provider = null): AiServiceInterface
     {
-        $provider = strtolower($provider ?? config('trading.ai.provider', 'openai'));
+        $provider = AiProviderConfig::normalize($provider);
 
         return match ($provider) {
-            'openai', 'gpt' => app(OpenAiService::class),
-            'anthropic', 'claude' => app(AnthropicService::class),
-            'gemini', 'google' => app(GeminiService::class),
+            'openai' => app(OpenAiService::class),
+            'anthropic' => app(AnthropicService::class),
+            'gemini' => app(GeminiService::class),
             default => throw new InvalidArgumentException("Unsupported AI provider: {$provider}"),
         };
+    }
+
+    public static function makeConfigured(?string $provider = null): AiServiceInterface
+    {
+        $provider = AiProviderConfig::normalize($provider);
+        AiProviderConfig::ensureConfigured($provider);
+
+        return self::make($provider);
     }
 }
