@@ -52,9 +52,12 @@ class AnthropicService implements AiServiceInterface
             ]);
 
         if ($response->failed()) {
-            throw new RuntimeException(
-                'Anthropic API error: '.$response->json('error.message', $response->body())
-            );
+            $error = $response->json('error.message', $response->body());
+            $hint = str_contains((string) $error, 'model')
+                ? ' Check Anthropic model ID in Super Admin → Trading settings (e.g. claude-sonnet-4-6).'
+                : '';
+
+            throw new RuntimeException('Anthropic API error: '.$error.$hint);
         }
 
         $blocks = $response->json('content', []);

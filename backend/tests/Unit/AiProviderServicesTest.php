@@ -16,7 +16,7 @@ class AiProviderServicesTest extends TestCase
     {
         config([
             'trading.ai.anthropic.api_key' => 'sk-ant-test',
-            'trading.ai.anthropic.model' => 'claude-sonnet-4-20250514',
+            'trading.ai.anthropic.model' => 'claude-sonnet-4-6',
         ]);
 
         Http::fake([
@@ -41,7 +41,7 @@ class AiProviderServicesTest extends TestCase
     {
         config([
             'trading.ai.anthropic.api_key' => 'sk-ant-test',
-            'trading.ai.anthropic.model' => 'claude-sonnet-4-20250514',
+            'trading.ai.anthropic.model' => 'claude-sonnet-4-6',
         ]);
 
         Http::fake([

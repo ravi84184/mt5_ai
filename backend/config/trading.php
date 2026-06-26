@@ -20,14 +20,29 @@ return [
     'openai' => [
       'api_key' => env('OPENAI_API_KEY'),
       'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+      'model_suggestions' => [
+        'gpt-4o-mini',
+        'gpt-4o',
+        'gpt-4.1-mini',
+      ],
     ],
     'anthropic' => [
       'api_key' => env('ANTHROPIC_API_KEY'),
-      'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
+      'model' => env('ANTHROPIC_MODEL', 'claude-sonnet-4-6'),
+      'model_suggestions' => [
+        'claude-sonnet-4-6',
+        'claude-sonnet-4-5-20250929',
+        'claude-haiku-4-5-20251001',
+      ],
     ],
     'gemini' => [
       'api_key' => env('GEMINI_API_KEY'),
-      'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
+      'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+      'model_suggestions' => [
+        'gemini-2.5-flash',
+        'gemini-2.0-flash',
+        'gemini-2.5-pro',
+      ],
     ],
   ],
 

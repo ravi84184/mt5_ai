@@ -63,8 +63,13 @@
                 </div>
                 <div class="form-group">
                     <label for="openai_model">Model</label>
-                    <input id="openai_model" name="openai_model" type="text" required
+                    <input id="openai_model" name="openai_model" type="text" required list="openai-models"
                            value="{{ old('openai_model', $settings['openai_model']) }}">
+                    <datalist id="openai-models">
+                        @foreach ($modelSuggestions['openai'] as $model)
+                            <option value="{{ $model }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
 
                 <h3 style="font-size:1rem;margin:1.5rem 0 0.75rem">Anthropic</h3>
@@ -80,8 +85,16 @@
                 </div>
                 <div class="form-group">
                     <label for="anthropic_model">Model</label>
-                    <input id="anthropic_model" name="anthropic_model" type="text" required
+                    <input id="anthropic_model" name="anthropic_model" type="text" required list="anthropic-models"
                            value="{{ old('anthropic_model', $settings['anthropic_model']) }}">
+                    <datalist id="anthropic-models">
+                        @foreach ($modelSuggestions['anthropic'] as $model)
+                            <option value="{{ $model }}"></option>
+                        @endforeach
+                    </datalist>
+                    <p class="text-muted" style="margin:0.25rem 0 0;font-size:0.875rem">
+                        Recommended: <code>claude-sonnet-4-6</code>. Old IDs like <code>claude-sonnet-4-20250514</code> are invalid.
+                    </p>
                 </div>
 
                 <h3 style="font-size:1rem;margin:1.5rem 0 0.75rem">Google Gemini</h3>
@@ -97,8 +110,13 @@
                 </div>
                 <div class="form-group">
                     <label for="gemini_model">Model</label>
-                    <input id="gemini_model" name="gemini_model" type="text" required
+                    <input id="gemini_model" name="gemini_model" type="text" required list="gemini-models"
                            value="{{ old('gemini_model', $settings['gemini_model']) }}">
+                    <datalist id="gemini-models">
+                        @foreach ($modelSuggestions['gemini'] as $model)
+                            <option value="{{ $model }}"></option>
+                        @endforeach
+                    </datalist>
                 </div>
             </div>
         </section>

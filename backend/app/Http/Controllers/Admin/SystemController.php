@@ -48,6 +48,11 @@ class SystemController extends Controller
         return view('admin.system.settings', [
             'settings' => $this->settings->valuesForForm(),
             'providers' => AiProvider::cases(),
+            'modelSuggestions' => [
+                'openai' => config('trading.ai.openai.model_suggestions', []),
+                'anthropic' => config('trading.ai.anthropic.model_suggestions', []),
+                'gemini' => config('trading.ai.gemini.model_suggestions', []),
+            ],
         ]);
     }
 
