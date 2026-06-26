@@ -4,24 +4,42 @@
 //| Navigator → Scripts → AI_Manual_Ask → drag onto chart            |
 //+------------------------------------------------------------------+
 #property copyright "MT5 AI Trading Platform"
-#property version   "1.00"
+#property version   "2.00"
 #property script_show_inputs
 
 input string   InpApiBaseUrl      = "https://mt5-ai.niksofts.com/api";
-input string   InpApiToken        = "change-me-in-production";
-input string   InpSymbols         = "XAUUSD";
+input string   InpApiToken        = "";  // Per-account token from Super Admin
+input string   InpSymbols         = "XAUUSD";  // Fallback when admin has none
 input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M15;
 input int      InpCandleCount     = 50;
+input bool     InpUseServerConfig = true;
+input bool     InpAllowSymbolFallback = false;
 input bool     InpManageOpenPos   = false;  // Also send open positions for management
 
 //+------------------------------------------------------------------+
 void OnStart()
 {
+   if(StringLen(InpApiToken) < 8)
+   {
+      Alert("Set InpApiToken — generate in Super Admin → Accounts");
+      return;
+   }
+
    string symbols[];
-   int count = ParseSymbols(InpSymbols, symbols);
+   int count = 0;
+
+   if(InpUseServerConfig)
+   {
+      if(!FetchSymbolsFromServer(symbols, count))
+         Print("Warning: Could not load admin config — using fallback if allowed");
+   }
+
+   if(count <= 0 && InpAllowSymbolFallback)
+      count = ParseSymbols(InpSymbols, symbols);
+
    if(count <= 0)
    {
-      Alert("No symbols configured.");
+      Alert("No symbols configured. Set symbols in Super Admin: /admin/accounts");
       return;
    }
 
@@ -34,9 +52,17 @@ void OnStart()
    json += "\"free_margin\":" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2);
    json += "},\"symbols\":[";
 
+   bool first = true;
    for(int i = 0; i < count; i++)
    {
-      if(i > 0) json += ",";
+      if(!SymbolInfoInteger(symbols[i], SYMBOL_EXIST))
+      {
+         Print("Skipping missing symbol: ", symbols[i]);
+         continue;
+      }
+      SymbolSelect(symbols[i], true);
+      if(!first) json += ",";
+      first = false;
       json += BuildSymbolJson(symbols[i], tf);
    }
    json += "]}";
@@ -56,6 +82,28 @@ void OnStart()
 
    if(InpManageOpenPos)
       SendAllOpenPositions();
+}
+
+//+------------------------------------------------------------------+
+bool FetchSymbolsFromServer(string &out[], int &count)
+{
+   string url = InpApiBaseUrl + "/account-config?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
+   string response;
+   if(!HttpGet(url, response))
+      return false;
+
+   bool configured = JsonGetBool(response, "configured", false);
+   string symbolsCsv = JsonGetSymbolsCsv(response);
+
+   if(symbolsCsv != "")
+      count = ParseSymbols(symbolsCsv, out);
+   else if(!configured && InpAllowSymbolFallback)
+      count = ParseSymbols(InpSymbols, out);
+   else
+      count = 0;
+
+   Print("Admin config: configured=", configured ? "yes" : "no", " | symbols=", count);
+   return true;
 }
 
 //+------------------------------------------------------------------+
@@ -92,6 +140,54 @@ int ParseSymbols(string list, string &out[])
    }
    ArrayResize(out, c);
    return c;
+}
+
+//+------------------------------------------------------------------+
+string JsonGetSymbolsCsv(string json)
+{
+   int start = StringFind(json, "\"symbols\":[");
+   if(start < 0)
+      return "";
+
+   start = StringFind(json, "[", start);
+   int end = StringFind(json, "]", start);
+   if(start < 0 || end < 0 || end <= start)
+      return "";
+
+   string inner = StringSubstr(json, start + 1, end - start - 1);
+   string result = "";
+   string parts[];
+   int count = StringSplit(inner, ',', parts);
+
+   for(int i = 0; i < count; i++)
+   {
+      string sym = parts[i];
+      StringReplace(sym, "\"", "");
+      StringTrimLeft(sym);
+      StringTrimRight(sym);
+      if(sym == "")
+         continue;
+      if(result != "")
+         result += ",";
+      result += sym;
+   }
+   return result;
+}
+
+//+------------------------------------------------------------------+
+bool JsonGetBool(string json, string key, bool defaultValue)
+{
+   string search = "\"" + key + "\":";
+   int pos = StringFind(json, search);
+   if(pos < 0)
+      return defaultValue;
+
+   string tail = StringSubstr(json, pos + StringLen(search), 8);
+   if(StringFind(tail, "true") == 0)
+      return true;
+   if(StringFind(tail, "false") == 0)
+      return false;
+   return defaultValue;
 }
 
 //+------------------------------------------------------------------+
@@ -149,7 +245,6 @@ string BuildPositionJson(ulong ticket, string symbol)
    int durationMinutes = (int)((TimeCurrent() - openTime) / 60);
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    double currentPrice = (type == POSITION_TYPE_BUY) ? SymbolInfoDouble(symbol, SYMBOL_BID) : SymbolInfoDouble(symbol, SYMBOL_ASK);
-   string tf = TimeframeToString(InpTimeframe);
 
    string json = "{\"ticket\":" + IntegerToString((long)ticket) + ",";
    json += "\"position\":{\"symbol\":\"" + symbol + "\",";
@@ -162,6 +257,22 @@ string BuildPositionJson(ulong ticket, string symbol)
    json += "\"duration_minutes\":" + IntegerToString(durationMinutes) + "},";
    json += "\"market_data\":{\"candles\":[],\"indicators\":{}}}";
    return json;
+}
+
+//+------------------------------------------------------------------+
+bool HttpGet(string url, string &response)
+{
+   char data[];
+   char result[];
+   string headers = "X-API-TOKEN: " + InpApiToken + "\r\n";
+   int res = WebRequest("GET", url, headers, 10000, data, result, headers);
+   if(res == -1)
+   {
+      Print("WebRequest GET failed. Error: ", GetLastError());
+      return false;
+   }
+   response = CharArrayToString(result, 0, WHOLE_ARRAY, CP_UTF8);
+   return res == 200;
 }
 
 //+------------------------------------------------------------------+

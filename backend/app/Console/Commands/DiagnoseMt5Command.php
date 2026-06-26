@@ -47,6 +47,7 @@ class DiagnoseMt5Command extends Command
             ['QUEUE_CONNECTION', config('queue.default')],
             ['AI_PROVIDER', config('trading.ai.provider')],
             ['OPENAI_API_KEY', $this->mask(config('trading.ai.openai.api_key'))],
+            ['Settings source', 'Super Admin → /admin/system/settings (DB overrides .env)'],
             ['MT5_API_TOKEN', $this->mask(config('trading.api_token'))],
         ]);
 

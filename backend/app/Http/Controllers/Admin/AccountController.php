@@ -28,6 +28,55 @@ class AccountController extends Controller
         return view('admin.accounts.index', compact('accounts'));
     }
 
+    public function create(): View
+    {
+        return view('admin.accounts.create', [
+            'providers' => AiProvider::cases(),
+            'defaultProvider' => config('trading.ai.provider'),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'mt5_login' => ['required', 'integer', 'unique:accounts,mt5_login'],
+            'broker' => ['nullable', 'string', 'max:120'],
+            'ai_provider' => ['nullable', 'string', 'in:'.implode(',', AiProvider::values())],
+            'symbols' => ['nullable', 'string', 'max:500'],
+            'trading_enabled' => ['nullable', 'boolean'],
+            'min_confidence' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'max_open_trades' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'admin_notes' => ['nullable', 'string', 'max:2000'],
+            'generate_api_token' => ['nullable', 'boolean'],
+        ]);
+
+        $symbols = Account::normalizeSymbols($validated['symbols'] ?? '');
+
+        $account = Account::create([
+            'mt5_login' => $validated['mt5_login'],
+            'broker' => $validated['broker'] ?? null,
+            'ai_provider' => $validated['ai_provider'] ?: null,
+            'symbols' => $symbols === [] ? null : $symbols,
+            'trading_enabled' => $request->boolean('trading_enabled'),
+            'min_confidence' => $validated['min_confidence'] ?? null,
+            'max_open_trades' => $validated['max_open_trades'] ?? null,
+            'admin_notes' => $validated['admin_notes'] ?? null,
+        ]);
+
+        $redirect = redirect()->route('admin.accounts.show', $account)
+            ->with('status', "Account {$account->mt5_login} created.");
+
+        if ($request->boolean('generate_api_token')) {
+            $plainToken = $account->generateApiToken();
+
+            return $redirect
+                ->with('api_token', $plainToken)
+                ->with('status', "Account {$account->mt5_login} created. Copy the API token below into MT5 InpApiToken — it is shown only once.");
+        }
+
+        return $redirect;
+    }
+
     public function show(Account $account): View
     {
         $account->loadCount(['signals', 'trades']);
@@ -52,6 +101,7 @@ class AccountController extends Controller
     public function update(Request $request, Account $account): RedirectResponse
     {
         $validated = $request->validate([
+            'broker' => ['nullable', 'string', 'max:120'],
             'ai_provider' => ['nullable', 'string', 'in:'.implode(',', AiProvider::values())],
             'symbols' => ['nullable', 'string', 'max:500'],
             'trading_enabled' => ['nullable', 'boolean'],
@@ -60,14 +110,10 @@ class AccountController extends Controller
             'admin_notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $symbols = collect(preg_split('/[\s,]+/', $validated['symbols'] ?? '') ?: [])
-            ->map(fn ($symbol) => strtoupper(trim((string) $symbol)))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        $symbols = Account::normalizeSymbols($validated['symbols'] ?? '');
 
         $account->update([
+            'broker' => $validated['broker'] ?? null,
             'ai_provider' => $validated['ai_provider'] ?: null,
             'symbols' => $symbols === [] ? null : $symbols,
             'trading_enabled' => $request->boolean('trading_enabled'),
@@ -79,6 +125,23 @@ class AccountController extends Controller
         return redirect()
             ->route('admin.accounts.show', $account)
             ->with('status', 'Account settings saved.');
+    }
+
+    public function generateToken(Account $account): RedirectResponse
+    {
+        $plainToken = $account->generateApiToken();
+
+        return redirect()
+            ->route('admin.accounts.show', $account)
+            ->with('api_token', $plainToken)
+            ->with('status', 'New API token generated. Copy it into MT5 InpApiToken now — it will not be shown again.');
+    }
+
+    public function revokeToken(Account $account): RedirectResponse
+    {
+        $account->revokeApiToken();
+
+        return back()->with('status', 'API token revoked. Generate a new one before the EA can connect with a per-account token.');
     }
 
     public function toggleTrading(Account $account): RedirectResponse

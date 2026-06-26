@@ -17,6 +17,8 @@
 
     <div class="grid-stats" style="margin-bottom:1.5rem">
         @foreach([
+            'Broker' => $account->broker ?: '—',
+            'API token' => $account->hasApiToken() ? 'Active (since '.$account->api_token_created_at?->format('M j, Y').')' : 'Not set',
             'AI Provider' => $account->resolvedAiProvider(),
             'Symbols' => $account->hasSymbolRestrictions() ? implode(', ', $account->configuredSymbols()) : 'Not set',
             'Trading' => $account->trading_enabled ? 'Enabled' : 'Disabled',
@@ -39,6 +41,29 @@
             <div class="panel-footer">{{ $account->admin_notes }}</div>
         </section>
     @endif
+
+    <section class="panel" style="margin-bottom:1.5rem;max-width:40rem">
+        <div class="panel-header"><h2>MT5 API token</h2></div>
+        <div style="padding:1rem">
+            @if ($account->hasApiToken())
+                <p style="margin:0 0 1rem">A token is active for this account. It is stored hashed — you cannot view it again.</p>
+                <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}" style="display:inline;margin-right:0.5rem">
+                    @csrf
+                    <button type="submit" class="btn btn-primary" onclick="return confirm('Generate a new token? The old token will stop working immediately.')">Regenerate token</button>
+                </form>
+                <form method="POST" action="{{ route('admin.accounts.revoke-token', $account) }}" style="display:inline">
+                    @csrf
+                    <button type="submit" class="btn" onclick="return confirm('Revoke API token? The EA will lose access until a new token is set.')">Revoke token</button>
+                </form>
+            @else
+                <p style="margin:0 0 1rem">No API token yet. Generate one and paste it into MT5 EA <code>InpApiToken</code>.</p>
+                <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}">
+                    @csrf
+                    <button type="submit" class="btn btn-primary">Generate API token</button>
+                </form>
+            @endif
+        </div>
+    </section>
 
     <div class="grid-2">
         <section class="panel">

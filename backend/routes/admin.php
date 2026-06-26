@@ -21,9 +21,13 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('/', [OverviewController::class, 'index'])->name('overview');
 
     Route::get('accounts', [AccountController::class, 'index'])->name('accounts.index');
+    Route::get('accounts/create', [AccountController::class, 'create'])->name('accounts.create');
+    Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
     Route::get('accounts/{account}', [AccountController::class, 'show'])->name('accounts.show');
     Route::get('accounts/{account}/edit', [AccountController::class, 'edit'])->name('accounts.edit');
     Route::put('accounts/{account}', [AccountController::class, 'update'])->name('accounts.update');
+    Route::post('accounts/{account}/generate-token', [AccountController::class, 'generateToken'])->name('accounts.generate-token');
+    Route::post('accounts/{account}/revoke-token', [AccountController::class, 'revokeToken'])->name('accounts.revoke-token');
     Route::post('accounts/{account}/toggle-trading', [AccountController::class, 'toggleTrading'])->name('accounts.toggle-trading');
 
     Route::get('signals', [SignalController::class, 'index'])->name('signals.index');
@@ -47,6 +51,8 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('ai-logs/{aiLog}', [AiLogController::class, 'show'])->name('ai-logs.show');
 
     Route::get('system', [SystemController::class, 'index'])->name('system.index');
+    Route::get('system/settings', [SystemController::class, 'settings'])->name('system.settings');
+    Route::put('system/settings', [SystemController::class, 'updateSettings'])->name('system.settings.update');
     Route::get('system/queue', [SystemController::class, 'queue'])->name('system.queue');
     Route::post('system/queue/retry-all', [SystemController::class, 'retryAllFailed'])->name('system.queue.retry-all');
     Route::post('system/queue/flush-failed', [SystemController::class, 'flushFailed'])->name('system.queue.flush-failed');

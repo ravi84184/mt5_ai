@@ -5,11 +5,18 @@
 @section('subheading', 'Manage AI provider, symbols, and trading per MT5 account')
 
 @section('content')
+    <div style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+        <a href="{{ route('admin.accounts.index') }}">← Accounts</a>
+        <a href="{{ route('admin.accounts.create') }}" class="btn btn-primary">Add account</a>
+    </div>
+
     <section class="panel">
         <table>
             <thead>
                 <tr>
                     <th>MT5 Login</th>
+                    <th>Broker</th>
+                    <th>API Token</th>
                     <th>AI Provider</th>
                     <th>Symbols</th>
                     <th>Trading</th>
@@ -24,6 +31,8 @@
                         <td class="text-mono">
                             <a href="{{ route('admin.accounts.show', $account) }}">{{ $account->mt5_login }}</a>
                         </td>
+                        <td class="text-muted">{{ $account->broker ?: '—' }}</td>
+                        <td>{{ $account->hasApiToken() ? 'Active' : 'None' }}</td>
                         <td class="text-muted">{{ $account->resolvedAiProvider() }}</td>
                         <td class="truncate" title="{{ implode(', ', $account->configuredSymbols()) }}">
                             @if ($account->hasSymbolRestrictions())
@@ -47,7 +56,7 @@
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="empty">No accounts yet. Attach EA in MT5 to register.</td></tr>
+                    <tr><td colspan="9" class="empty">No accounts yet. <a href="{{ route('admin.accounts.create') }}">Add an account</a> or attach EA in MT5.</td></tr>
                 @endforelse
             </tbody>
         </table>

@@ -2,8 +2,11 @@
 
 return [
 
+  // MT5_API_TOKEN: optional legacy global token (per-account tokens preferred)
+
   'api_token' => env('MT5_API_TOKEN', 'change-me-in-production'),
 
+  // Defaults — overridden by Super Admin → System → Trading settings when saved
   'symbols' => array_filter(array_map('trim', explode(',', env('TRADING_SYMBOLS',
     'BTCUSDT,ETHUSDT,PAXGUSDT,XAUUSD,EURUSD,GBPUSD'
   )))),

@@ -26,6 +26,7 @@ class AccountConfigController extends Controller
                 'min_confidence' => (int) config('trading.risk.min_confidence', 80),
                 'max_open_trades' => (int) config('trading.risk.max_open_trades', 3),
                 'configured' => false,
+                'has_api_token' => false,
             ]);
         }
 

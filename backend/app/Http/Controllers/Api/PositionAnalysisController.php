@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Concerns\AuthorizesMt5Account;
 use App\Http\Controllers\Controller;
 use App\Jobs\ProcessPositionAnalysisJob;
 use App\Models\Account;
@@ -11,6 +12,8 @@ use Illuminate\Http\Request;
 
 class PositionAnalysisController extends Controller
 {
+    use AuthorizesMt5Account;
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -31,6 +34,10 @@ class PositionAnalysisController extends Controller
                 return response()->json(['error' => 'Trade not found for ticket'], 404);
             }
             $account = $trade->account;
+        }
+
+        if ($response = $this->denyIfWrongAccount($request, $account)) {
+            return $response;
         }
 
         ProcessPositionAnalysisJob::dispatch($account->id, $validated);

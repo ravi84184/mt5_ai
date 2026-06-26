@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\SignalAction;
 use App\Enums\SignalStatus;
+use App\Jobs\Concerns\AppliesTradingSettings;
 use App\Models\Account;
 use App\Models\MarketSnapshot;
 use App\Models\Signal;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 
 class ProcessMarketAnalysisJob implements ShouldQueue
 {
+    use AppliesTradingSettings;
     use Queueable;
 
     public int $tries = 3;
@@ -31,6 +33,8 @@ class ProcessMarketAnalysisJob implements ShouldQueue
 
     public function handle(RiskManagementService $riskService): void
     {
+        $this->applyTradingSettings();
+
         $account = Account::findOrFail($this->accountId);
 
         if (! $account->isTradingEnabled()) {

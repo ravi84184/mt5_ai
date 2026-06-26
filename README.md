@@ -27,8 +27,7 @@ cp .env.example .env
 php artisan key:generate
 
 # Configure database in .env (SQLite works for local dev)
-# Set AI_PROVIDER and API keys (OPENAI_API_KEY, etc.)
-# Set MT5_API_TOKEN
+# Set ADMIN_PASSWORD, then configure AI keys in Super Admin after migrate
 
 php artisan migrate
 php artisan queue:work
@@ -44,11 +43,13 @@ API base URL: `http://127.0.0.1:8000/api`
 3. In MT5: **Tools → Options → Expert Advisors → Allow WebRequest**
 4. Add your API URL (e.g. `http://127.0.0.1:8000`)
 5. Attach EA to a chart and configure inputs:
-   - `InpApiBaseUrl` — Laravel API URL
-   - `InpApiToken` — must match `MT5_API_TOKEN` in `.env`
-   - `InpSymbols` — comma-separated symbols
-   - `InpMinConfidence` — default 80
-6. **Manual AI request:** click **Ask AI Entry** on chart, or run script `AI_Manual_Ask.mq5`
+   - `InpApiBaseUrl` — Laravel API URL (must end with `/api`)
+   - `InpApiToken` — per-account token from Super Admin (Accounts → Generate API token)
+   - `InpUseServerConfig` — `true` to load symbols, AI provider, and risk limits from Super Admin
+   - `InpSymbols` — fallback only when `InpAllowSymbolFallback=true` and admin has no symbols
+   - `InpMinConfidence` / `InpMaxOpenTrades` — local fallback if admin has no override
+6. Configure the account in Super Admin (`/admin/accounts`): symbols, AI provider, trading on/off
+7. **Manual AI request:** click **Ask AI Entry** on chart, or run script `AI_Manual_Ask.mq5`
 
 ### 3. Production
 
@@ -59,6 +60,8 @@ API base URL: `http://127.0.0.1:8000/api`
 ### 4. Super Admin
 
 Full control panel at `/admin` (password-protected). Manages accounts, AI providers, symbols, signals, trades, queue, and system config.
+
+**Trading settings** (AI keys, risk limits, default symbols): `/admin/system/settings`
 
 ```env
 ADMIN_PASSWORD=your-secure-password
@@ -90,21 +93,21 @@ Open `https://your-domain.com/admin`
 | POST | `/api/signals/management/applied` | Confirm management action applied |
 | POST | `/api/trades/update` | Trade open/close updates |
 
-All endpoints require header: `X-API-TOKEN: {MT5_API_TOKEN}`
+All endpoints require header: `X-API-TOKEN: {per-account token}` (generated in Super Admin) or legacy global `MT5_API_TOKEN`
 
 ## Configuration
 
-Key `.env` variables:
+**Super Admin → System → Trading settings** (`/admin/system/settings`):
+
+- AI provider and API keys (OpenAI, Anthropic, Gemini)
+- Default symbols and candle count
+- Risk limits (confidence, max trades, drawdown, sessions)
+
+`.env` fallbacks (optional — used only when not saved in admin):
 
 ```env
-MT5_API_TOKEN=your-secret-token
-AI_PROVIDER=openai          # openai | anthropic | gemini
-OPENAI_API_KEY=sk-...
-MIN_CONFIDENCE=80
-MAX_OPEN_TRADES=3
-RISK_PER_TRADE_PCT=1.0
-MAX_DAILY_DRAWDOWN_PCT=3.0
-TRADING_SYMBOLS=BTCUSDT,ETHUSDT,PAXGUSDT,XAUUSD,EURUSD,GBPUSD
+ADMIN_PASSWORD=your-secure-password
+MT5_API_TOKEN=your-secret-token  # optional legacy global token
 ```
 
 ## Development Milestones

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\TradeManagementAction;
+use App\Jobs\Concerns\AppliesTradingSettings;
 use App\Models\Account;
 use App\Models\PositionManagementDecision;
 use App\Models\Trade;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 
 class ProcessPositionAnalysisJob implements ShouldQueue
 {
+    use AppliesTradingSettings;
     use Queueable;
 
     public int $tries = 3;
@@ -30,6 +32,8 @@ class ProcessPositionAnalysisJob implements ShouldQueue
 
     public function handle(): void
     {
+        $this->applyTradingSettings();
+
         $account = Account::findOrFail($this->accountId);
         $ticket = (int) ($this->payload['ticket'] ?? 0);
 

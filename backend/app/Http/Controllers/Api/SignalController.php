@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\SignalStatus;
+use App\Http\Concerns\AuthorizesMt5Account;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\PositionManagementDecision;
@@ -14,6 +15,8 @@ use Illuminate\Http\Request;
 
 class SignalController extends Controller
 {
+    use AuthorizesMt5Account;
+
     public function index(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -23,6 +26,10 @@ class SignalController extends Controller
         $account = Account::where('mt5_login', $validated['account'])->first();
         if (! $account) {
             return response()->json(['status' => 'NO_SIGNAL']);
+        }
+
+        if ($response = $this->denyIfWrongAccount($request, $account)) {
+            return $response;
         }
 
         if (! $account->isTradingEnabled()) {
@@ -58,6 +65,11 @@ class SignalController extends Controller
         ]);
 
         $signal = Signal::findOrFail($validated['signal_id']);
+
+        if ($response = $this->denyIfWrongAccountId($request, $signal->account_id)) {
+            return $response;
+        }
+
         $signal->update([
             'status' => SignalStatus::Executed,
             'ticket' => $validated['ticket'],
@@ -91,6 +103,10 @@ class SignalController extends Controller
             return response()->json(['status' => 'NO_ACTION']);
         }
 
+        if ($response = $this->denyIfWrongAccount($request, $account)) {
+            return $response;
+        }
+
         $query = PositionManagementDecision::where('account_id', $account->id)
             ->where('status', 'PENDING');
 
@@ -121,6 +137,14 @@ class SignalController extends Controller
             'action' => ['required', 'string'],
             'status' => ['required', 'string'],
         ]);
+
+        $decision = PositionManagementDecision::where('ticket', $validated['ticket'])
+            ->where('status', 'FETCHED')
+            ->first();
+
+        if ($decision && ($response = $this->denyIfWrongAccountId($request, $decision->account_id))) {
+            return $response;
+        }
 
         PositionManagementDecision::where('ticket', $validated['ticket'])
             ->where('status', 'FETCHED')

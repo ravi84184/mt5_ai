@@ -3,24 +3,26 @@
 //| AI Trading Platform - MetaTrader 5 Expert Advisor                |
 //+------------------------------------------------------------------+
 #property copyright "MT5 AI Trading Platform"
-#property version   "1.00"
+#property version   "2.00"
 #property strict
 
 #include <Trade/Trade.mqh>
 
 //--- Inputs
 input string   InpApiBaseUrl      = "https://mt5-ai.niksofts.com/api";
-input string   InpApiToken        = "f346b6da84c7884e912b50ad257f40c880398071fcf739f13ea0327ceb9fa42b";
+input string   InpApiToken        = "";  // Per-account token from Super Admin
 input int      InpPollIntervalSec = 7;
+input int      InpConfigPollSec   = 210; // Re-fetch admin settings (0 = use timer cycles)
 input int      InpCandleCount     = 50;
-input double   InpMinConfidence   = 80.0;
+input double   InpMinConfidence   = 80.0;  // Fallback if admin has no override
 input double   InpRiskPerTradePct = 1.0;
-input int      InpMaxOpenTrades   = 3;
-input string   InpSymbols         = "XAUUSD,EURUSD,GBPUSD";  // Fallback if admin has not configured symbols
+input int      InpMaxOpenTrades   = 3;   // Fallback if admin has no override
+input string   InpSymbols         = "XAUUSD";  // Fallback only when InpAllowSymbolFallback=true
 input ENUM_TIMEFRAMES InpTimeframe = PERIOD_M15;
 input int      InpMagicNumber     = 20260625;
-input bool     InpShowButtons     = true;   // Show "Ask AI" buttons on chart
-input bool     InpUseServerSymbols = true;  // Use symbols from admin dashboard
+input bool     InpShowButtons     = true;
+input bool     InpUseServerConfig = true;   // Symbols & limits from Super Admin
+input bool     InpAllowSymbolFallback = false; // Use InpSymbols when admin has none set
 
 //--- Globals
 #define BTN_ASK_AI    "AiBtn_AskEntry"
@@ -31,30 +33,65 @@ datetime       g_lastBarTime = 0;
 string         g_symbols[];
 int            g_symbolCount = 0;
 bool           g_tradingEnabled = true;
+bool           g_configured = false;
+int            g_minConfidence = 80;
+int            g_maxOpenTrades = 3;
+string         g_aiProvider = "";
 int            g_configPollCounter = 0;
+int            g_configPollEvery = 30;
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   if(StringLen(InpApiToken) < 8)
+   {
+      Print("ERROR: Set InpApiToken — generate in Super Admin → Accounts → Generate API token");
+      return INIT_PARAMETERS_INCORRECT;
+   }
+
    trade.SetExpertMagicNumber(InpMagicNumber);
    trade.SetDeviationInPoints(20);
    trade.SetTypeFilling(ORDER_FILLING_IOC);
 
-   if(InpUseServerSymbols)
-      FetchAccountConfig();
+   g_minConfidence = (int)InpMinConfidence;
+   g_maxOpenTrades = InpMaxOpenTrades;
+   g_configPollEvery = (InpConfigPollSec > 0) ? MathMax(1, InpConfigPollSec / InpPollIntervalSec) : 30;
 
-   if(!LoadSymbolList(InpUseServerSymbols ? "" : InpSymbols))
+   if(InpUseServerConfig)
    {
-      Print("Failed to load symbols. Configure symbols in admin dashboard or set InpSymbols.");
-      return INIT_FAILED;
+      if(!FetchAccountConfig())
+         Print("Warning: Could not load admin config — check API token and WebRequest URL");
+   }
+   else
+   {
+      if(!LoadSymbolList(InpSymbols))
+      {
+         Print("Failed to parse InpSymbols: ", InpSymbols);
+         return INIT_FAILED;
+      }
    }
 
+   if(g_symbolCount <= 0)
+   {
+      Print("No symbols to trade. Configure symbols in Super Admin: /admin/accounts");
+      if(!InpAllowSymbolFallback)
+         return INIT_FAILED;
+      if(!LoadSymbolList(InpSymbols))
+         return INIT_FAILED;
+   }
+
+   if(!EnsureSymbolsInMarketWatch())
+      Print("Warning: Some symbols are missing from Market Watch");
+
    EventSetTimer(InpPollIntervalSec);
-   Print("AI Trading EA started. Symbols: ", g_symbolCount);
+   UpdateChartComment();
+   Print("AI Trading EA v2 started | symbols=", g_symbolCount,
+         " | trading=", g_tradingEnabled ? "ON" : "OFF",
+         " | AI=", g_aiProvider);
    Print("API: ", InpApiBaseUrl, " | Account: ", AccountInfoInteger(ACCOUNT_LOGIN));
 
-   // Send market data immediately (don't wait for next candle)
-   SendMarketData();
+   if(g_tradingEnabled && g_symbolCount > 0)
+      SendMarketData();
 
    if(InpShowButtons)
       CreateManualButtons();
@@ -67,6 +104,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    DeleteManualButtons();
+   Comment("");
 }
 
 //+------------------------------------------------------------------+
@@ -80,6 +118,11 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
       ObjectSetInteger(0, BTN_ASK_AI, OBJPROP_STATE, false);
       ChartRedraw();
       Print("=== Manual AI entry analysis requested ===");
+      if(g_symbolCount <= 0)
+      {
+         Print("No symbols configured in Super Admin (/admin/accounts)");
+         return;
+      }
       SendMarketData();
    }
    else if(sparam == BTN_MANAGE)
@@ -132,10 +175,11 @@ void CreateChartButton(string name, string text, int x, int y, int w, int h)
 void OnTimer()
 {
    g_configPollCounter++;
-   if(InpUseServerSymbols && g_configPollCounter >= 30)
+   if(InpUseServerConfig && g_configPollCounter >= g_configPollEvery)
    {
       g_configPollCounter = 0;
-      FetchAccountConfig();
+      if(FetchAccountConfig())
+         UpdateChartComment();
    }
 
    if(g_tradingEnabled)
@@ -152,7 +196,10 @@ void OnTick()
       return;
 
    g_lastBarTime = barTime;
-   SendMarketData();
+
+   if(g_tradingEnabled && g_symbolCount > 0)
+      SendMarketData();
+
    SendOpenPositionsAnalysis();
 }
 
@@ -205,34 +252,86 @@ bool ParseSymbols()
 }
 
 //+------------------------------------------------------------------+
-void FetchAccountConfig()
+bool EnsureSymbolsInMarketWatch()
+{
+   bool allOk = true;
+   for(int i = 0; i < g_symbolCount; i++)
+   {
+      if(!SymbolInfoInteger(g_symbols[i], SYMBOL_EXIST))
+      {
+         Print("Symbol not found on broker: ", g_symbols[i]);
+         allOk = false;
+         continue;
+      }
+      if(!SymbolSelect(g_symbols[i], true))
+      {
+         Print("Failed to add to Market Watch: ", g_symbols[i]);
+         allOk = false;
+      }
+   }
+   return allOk;
+}
+
+//+------------------------------------------------------------------+
+void UpdateChartComment()
+{
+   string lines = "MT5 AI EA v2\n";
+   lines += "Account: " + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN)) + "\n";
+   lines += "Trading: " + (g_tradingEnabled ? "ON" : "OFF") + "\n";
+   lines += "AI: " + (g_aiProvider != "" ? g_aiProvider : "default") + "\n";
+   lines += "Symbols: " + IntegerToString(g_symbolCount) + "\n";
+   lines += "Min conf: " + IntegerToString(g_minConfidence) + "%\n";
+   lines += "Max trades: " + IntegerToString(g_maxOpenTrades);
+   Comment(lines);
+}
+
+//+------------------------------------------------------------------+
+bool FetchAccountConfig()
 {
    string url = InpApiBaseUrl + "/account-config?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
    string response;
    if(!HttpGet(url, response))
    {
-      Print("Account config fetch failed — using EA fallback symbols");
-      return;
+      Print("Account config fetch failed — check WebRequest URL and API token");
+      return false;
    }
 
-   g_tradingEnabled = JsonGetBool(response, "trading_enabled", true);
+   g_tradingEnabled = JsonGetBool(response, "trading_enabled", false);
+   g_configured = JsonGetBool(response, "configured", false);
+   g_aiProvider = JsonGetString(response, "ai_provider");
+
+   int serverMinConf = JsonGetInt(response, "min_confidence");
+   if(serverMinConf > 0)
+      g_minConfidence = serverMinConf;
+
+   int serverMaxTrades = JsonGetInt(response, "max_open_trades");
+   if(serverMaxTrades > 0)
+      g_maxOpenTrades = serverMaxTrades;
 
    string symbolsCsv = JsonGetSymbolsCsv(response);
    if(symbolsCsv != "")
    {
-      if(LoadSymbolList(symbolsCsv))
-         Print("Symbols loaded from server: ", symbolsCsv);
-      else
-         Print("Server returned symbols but parsing failed: ", symbolsCsv);
+      if(!LoadSymbolList(symbolsCsv))
+         Print("Server symbols parse failed: ", symbolsCsv);
    }
-   else
+   else if(g_configured == false && InpAllowSymbolFallback)
    {
-      Print("No symbols configured in admin dashboard yet — set symbols at /dashboard/accounts");
+      LoadSymbolList(InpSymbols);
+   }
+   else if(g_configured == false)
+   {
+      g_symbolCount = 0;
+      ArrayResize(g_symbols, 0);
    }
 
-   Print("Account config: trading=", g_tradingEnabled ? "ON" : "OFF",
-         " | provider=", JsonGetString(response, "ai_provider"),
-         " | symbols=", g_symbolCount);
+   Print("Admin config: trading=", g_tradingEnabled ? "ON" : "OFF",
+         " | configured=", g_configured ? "yes" : "no",
+         " | AI=", g_aiProvider,
+         " | symbols=", g_symbolCount,
+         " | minConf=", g_minConfidence,
+         " | maxTrades=", g_maxOpenTrades);
+
+   return true;
 }
 
 //+------------------------------------------------------------------+
@@ -289,6 +388,12 @@ string Trim(string value)
 //+------------------------------------------------------------------+
 void SendMarketData()
 {
+   if(g_symbolCount <= 0)
+   {
+      Print("Market data skipped — no symbols configured in Super Admin");
+      return;
+   }
+
    string json = BuildMarketDataJson();
    string response;
    if(HttpPost(InpApiBaseUrl + "/market-data", json, response))
@@ -310,9 +415,16 @@ string BuildMarketDataJson()
    json += "},";
    json += "\"symbols\":[";
 
+   bool first = true;
    for(int i = 0; i < g_symbolCount; i++)
    {
-      if(i > 0) json += ",";
+      if(!SymbolInfoInteger(g_symbols[i], SYMBOL_EXIST))
+      {
+         Print("Skipping missing symbol: ", g_symbols[i]);
+         continue;
+      }
+      if(!first) json += ",";
+      first = false;
       json += BuildSymbolJson(g_symbols[i], tf);
    }
 
@@ -407,15 +519,15 @@ void PollSignals()
    double sl = JsonGetDouble(response, "stop_loss");
    double tp = JsonGetDouble(response, "take_profit");
 
-   if(confidence < InpMinConfidence)
+   if(confidence < g_minConfidence)
    {
-      Print("Signal rejected: confidence ", confidence, " < ", InpMinConfidence);
+      Print("Signal rejected: confidence ", confidence, " < ", g_minConfidence);
       return;
    }
 
-   if(CountOpenTrades() >= InpMaxOpenTrades)
+   if(CountOpenTrades() >= g_maxOpenTrades)
    {
-      Print("Signal rejected: max open trades reached");
+      Print("Signal rejected: max open trades reached (", g_maxOpenTrades, ")");
       return;
    }
 

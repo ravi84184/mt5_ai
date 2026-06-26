@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Enums\SignalStatus;
+use App\Http\Concerns\AuthorizesMt5Account;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Trade;
@@ -12,6 +13,8 @@ use Illuminate\Http\Request;
 
 class TradeController extends Controller
 {
+    use AuthorizesMt5Account;
+
     public function update(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -45,6 +48,10 @@ class TradeController extends Controller
 
         if (! $trade) {
             return response()->json(['error' => 'Trade not found'], 404);
+        }
+
+        if ($response = $this->denyIfWrongAccountId($request, $trade->account_id)) {
+            return $response;
         }
 
         $trade->update([

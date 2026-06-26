@@ -32,7 +32,8 @@ https://mt5-ai.niksofts.com
 
 **EA inputs must match server:**
 - `InpApiBaseUrl` = `https://mt5-ai.niksofts.com/api`
-- `InpApiToken` = same as `MT5_API_TOKEN` in server `.env`
+- `InpApiToken` = per-account token from Super Admin (`/admin/accounts` → Generate API token)
+- Legacy: global `MT5_API_TOKEN` in server `.env` still works if set
 
 **Enable:** AutoTrading button ON (green) in MT5 toolbar.
 
@@ -142,18 +143,17 @@ php artisan ai:logs --symbol=XAUUSD --type=entry
 
 ## Step 5 — AI API key
 
-On server `.env`:
+Set in **Super Admin → System → Trading settings** (`/admin/system/settings`):
 
-```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-```
+- Default AI provider (OpenAI / Anthropic / Gemini)
+- API key for the provider you use
+
+Keys are stored encrypted in the database. Leave the key field blank when saving other settings to keep the existing key.
 
 Test:
 
 ```bash
-grep OPENAI_API_KEY .env   # must not be empty
-php artisan config:clear
+php artisan mt5:diagnose   # shows masked key + settings source
 php artisan queue:work --once
 tail -20 storage/logs/laravel.log
 ```
@@ -182,22 +182,58 @@ MT5 EA rejects locally if:
 
 | Reason | Experts tab message |
 |--------|---------------------|
-| confidence < 80 | `Signal rejected: confidence ...` |
-| Max open trades | `Signal rejected: max open trades` |
+| confidence below admin limit | `Signal rejected: confidence ...` |
+| Max open trades (admin limit) | `Signal rejected: max open trades reached` |
 | Position already open | `Signal rejected: position already open` |
+| Trading disabled in admin | EA skips signal polling |
+| No symbols in admin | `No symbols configured in Super Admin` |
 | action is WAIT | Not returned by API (filtered server-side) |
-| Symbol not in Market Watch | Order fails silently — add symbol |
+| Symbol not in Market Watch | Order fails — EA adds symbols on init when possible |
 | AutoTrading off | No execution |
 
 ---
 
-## Step 8 — Symbol names
+## Trading & AI settings (Super Admin)
 
-Broker symbols may differ: `XAUUSD` vs `XAUUSD.m` vs `GOLD`.
+Configure AI API keys, models, default symbols, risk limits, and trading sessions in:
 
-EA `InpSymbols` must match **exact broker symbol names**.
+**`/admin/system/settings`**
 
-In MT5 Market Watch, right-click symbol → Specification → use exact name.
+Settings are stored in the database (API keys encrypted). `.env` values are fallbacks only when not set in admin.
+
+After changing AI keys or risk settings, restart long-running queue workers:
+
+```bash
+sudo supervisorctl restart mt5-ai-worker:*
+```
+
+## Step 8 — Symbols & API token (Super Admin)
+
+### Add account and API token
+
+1. Open `https://your-domain.com/admin/accounts`
+2. Click **Add account** → enter MT5 login, broker, symbols, enable trading
+3. Check **Generate API token now** (or use **Generate API token** on account page later)
+4. Copy the token shown once into MT5 EA `InpApiToken`
+
+Each account has its own token. The token is stored hashed on the server — you cannot view it again after leaving the page.
+
+Legacy setups can still use a single global `MT5_API_TOKEN` in `.env` for all accounts.
+
+### Symbols
+
+1. Open `https://your-domain.com/admin/accounts`
+2. Find your MT5 login (auto-created after first market-data POST)
+3. Edit account → set **Symbols** (comma-separated, exact broker names)
+4. Enable **Trading** and set AI provider / risk limits
+
+EA v2 fetches settings from `GET /api/account-config` on start and every ~3.5 min (`InpConfigPollSec`).
+
+Chart comment shows: trading on/off, AI provider, symbol count, min confidence, max trades.
+
+Broker symbols may differ: `XAUUSD` vs `XAUUSD.m` vs `GOLD` — use exact Market Watch names.
+
+Fallback: set `InpAllowSymbolFallback=true` and `InpSymbols` only if you want local symbols when admin has none.
 
 ---
 
@@ -223,7 +259,7 @@ Hide buttons: set EA input `InpShowButtons = false`.
 1. Copy `mt5/AI_Manual_Ask.mq5` to `MQL5/Scripts/`
 2. Compile in MetaEditor
 3. Navigator → **Scripts → AI_Manual_Ask** → drag onto chart
-4. Set API URL, token, symbols → OK
+4. Set `InpApiToken` (required). With `InpUseServerConfig=true`, symbols come from Super Admin; otherwise set `InpSymbols` + `InpAllowSymbolFallback=true`
 
 Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
 
@@ -234,13 +270,14 @@ Runs once immediately. Enable `InpManageOpenPos` to also analyze open trades.
 - [ ] AutoTrading ON in MT5
 - [ ] WebRequest URL allowed (HTTPS, no `/api` suffix)
 - [ ] `InpApiBaseUrl` ends with `/api`
-- [ ] `InpApiToken` = server `MT5_API_TOKEN`
+- [ ] `InpApiToken` = per-account token from Super Admin (or legacy global `MT5_API_TOKEN`)
 - [ ] Supervisor workers RUNNING
-- [ ] `OPENAI_API_KEY` set in `.env`
+- [ ] AI API key configured in `/admin/system/settings`
 - [ ] `market_snapshots` table has rows
 - [ ] `signals` has PENDING BUY/SELL (not only WAIT/REJECTED)
 - [ ] MT5 account login matches `accounts.mt5_login`
-- [ ] Symbol names match broker
+- [ ] Account configured in Super Admin (`/admin/accounts`): symbols + trading enabled
+- [ ] `InpUseServerConfig=true` (default) or fallback symbols set
 
 ---
 
