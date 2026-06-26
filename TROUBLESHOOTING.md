@@ -157,6 +157,31 @@ php artisan ai:logs --symbol=XAUUSD --type=entry
 | Signals `REJECTED` | Failed risk rules (confidence, max trades, session) |
 | Signals `PENDING` + BUY/SELL | Should appear in MT5 poll — check account login matches |
 | failed_jobs rows | AI API error — check laravel.log or `ai:logs` |
+| Jobs FAIL in ~50ms | PHP syntax error in code — verify with `php -l app/Services/AI/PromptBuilder.php` |
+| `Permission denied` on laravel.log | Fix storage permissions (see below) |
+| Supervisor `FATAL` / `spawn error` | Worker cannot write logs — fix permissions and restart |
+
+### Worker FATAL / permission denied
+
+If `worker.log` shows `Permission denied` on `laravel.log` or `syntax error, unexpected token "??"`:
+
+```bash
+cd /var/www/mt5_ai && git pull origin main
+cd backend
+
+# Worker runs as www-data — storage must be writable
+sudo chown -R www-data:www-data storage bootstrap/cache
+sudo chmod -R ug+rwx storage bootstrap/cache
+
+php artisan optimize:clear
+php artisan queue:restart
+sudo supervisorctl reread && sudo supervisorctl update
+sudo supervisorctl restart mt5-ai-worker:*
+sudo supervisorctl status
+
+# Test as worker user (should end with DONE, may take 30–120s)
+sudo -u www-data php artisan queue:work --once
+```
 
 ---
 

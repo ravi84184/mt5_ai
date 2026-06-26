@@ -67,6 +67,11 @@ PROMPT;
         $riskPct = (float) ($risk['max_risk_per_trade_pct'] ?? 1.0);
         $indicators = $context['symbol']['indicators'] ?? [];
         $latestClose = self::latestClose($context['symbol']['candles'] ?? []);
+        $ema20 = $indicators['ema20'] ?? 'n/a';
+        $ema50 = $indicators['ema50'] ?? 'n/a';
+        $ema200 = $indicators['ema200'] ?? 'n/a';
+        $rsi = $indicators['rsi'] ?? 'n/a';
+        $atr = $indicators['atr'] ?? 'n/a';
 
         $summary = <<<TEXT
 Analyze {$symbol} on {$timeframe} for a new entry.
@@ -78,9 +83,9 @@ Constraints for this account:
 
 Current snapshot:
 - Latest closed price: {$latestClose}
-- EMA20/50/200: {$indicators['ema20'] ?? 'n/a'} / {$indicators['ema50'] ?? 'n/a'} / {$indicators['ema200'] ?? 'n/a'}
-- RSI: {$indicators['rsi'] ?? 'n/a'}
-- ATR: {$indicators['atr'] ?? 'n/a'}
+- EMA20/50/200: {$ema20} / {$ema50} / {$ema200}
+- RSI: {$rsi}
+- ATR: {$atr}
 
 Full market data (JSON):
 TEXT;
