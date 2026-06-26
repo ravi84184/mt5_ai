@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\AiProvider;
 use App\Http\Controllers\Controller;
+use App\Support\QueueMonitor;
 use App\Services\TradingSettingsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -63,15 +64,20 @@ class SystemController extends Controller
 
     public function queue(): View
     {
-        $failedJobs = DB::table('failed_jobs')
-            ->orderByDesc('failed_at')
-            ->limit(50)
-            ->get();
-
         return view('admin.system.queue', [
             'pending' => DB::table('jobs')->count(),
-            'failedJobs' => $failedJobs,
+            'failed' => DB::table('failed_jobs')->count(),
+            'pendingJobs' => QueueMonitor::pendingJobs(),
+            'failedJobs' => QueueMonitor::failedJobs(),
         ]);
+    }
+
+    public function showFailedJob(int $failedJob): View
+    {
+        $job = QueueMonitor::failedJob($failedJob);
+        abort_if($job === null, 404);
+
+        return view('admin.system.failed-job', compact('job'));
     }
 
     public function retryAllFailed(): RedirectResponse

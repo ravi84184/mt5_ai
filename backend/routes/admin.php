@@ -54,6 +54,7 @@ Route::middleware('admin.auth')->group(function () {
     Route::get('system/settings', [SystemController::class, 'settings'])->name('system.settings');
     Route::put('system/settings', [SystemController::class, 'updateSettings'])->name('system.settings.update');
     Route::get('system/queue', [SystemController::class, 'queue'])->name('system.queue');
+    Route::get('system/queue/failed/{failedJob}', [SystemController::class, 'showFailedJob'])->name('system.queue.failed');
     Route::post('system/queue/retry-all', [SystemController::class, 'retryAllFailed'])->name('system.queue.retry-all');
     Route::post('system/queue/flush-failed', [SystemController::class, 'flushFailed'])->name('system.queue.flush-failed');
 });

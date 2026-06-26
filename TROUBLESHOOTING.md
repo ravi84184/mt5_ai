@@ -67,6 +67,22 @@ Expected:
 
 ## Step 3 — Server: queue worker running?
 
+Jobs can look "slow" for two different reasons:
+
+1. **Worker not running** — jobs sit in the queue for minutes/hours (status: *waiting* in admin)
+2. **AI API call in progress** — normal; each analysis job can take **30–120 seconds** (status: *running*)
+
+### Track in Super Admin
+
+| Where | What it shows |
+|-------|----------------|
+| **Overview** | Queued / failed job counts |
+| **System → Queue monitor** (`/admin/system/queue`) | Pending jobs with wait time, failed jobs with errors |
+| **AI Logs** (`/admin/ai-logs`) | AI request errors (bad API key, timeout, invalid JSON) — even when the job eventually completes |
+| Failed job **Details** | Full exception + payload |
+
+### SSH checks
+
 SSH into EC2:
 
 ```bash
