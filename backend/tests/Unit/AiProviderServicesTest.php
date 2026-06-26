@@ -81,6 +81,45 @@ class AiProviderServicesTest extends TestCase
         $this->assertSame('BUY', $parsed['action']);
     }
 
+    public function test_json_parser_extracts_balanced_object_with_braces_in_reason(): void
+    {
+        $parsed = AiJsonParser::parse(
+            'Result: {"action":"WAIT","confidence":55,"reason":"Range {choppy}","symbol":"XAUUSD","entry_price":0,"stop_loss":0,"take_profit":0}',
+            'Test'
+        );
+
+        $this->assertSame('WAIT', $parsed['action']);
+        $this->assertSame('Range {choppy}', $parsed['reason']);
+    }
+
+    public function test_anthropic_uses_structured_output_schema(): void
+    {
+        config([
+            'trading.ai.anthropic.api_key' => 'sk-ant-test',
+            'trading.ai.anthropic.model' => 'claude-sonnet-4-6',
+        ]);
+
+        Http::fake([
+            'api.anthropic.com/*' => Http::response([
+                'content' => [[
+                    'type' => 'text',
+                    'text' => '{"symbol":"XAUUSD","action":"BUY","confidence":90,"entry_price":3350,"stop_loss":3340,"take_profit":3370,"reason":"Breakout"}',
+                ]],
+            ]),
+        ]);
+
+        app(AnthropicService::class)->analyzeEntry([
+            'symbol' => ['symbol' => 'XAUUSD'],
+        ]);
+
+        Http::assertSent(function ($request) {
+            $body = $request->data();
+
+            return ($body['output_config']['format']['type'] ?? null) === 'json_schema'
+                && ($body['output_config']['format']['schema']['properties']['action']['enum'] ?? null) === ['BUY', 'SELL', 'WAIT'];
+        });
+    }
+
     public function test_gemini_entry_analysis_parses_json_response(): void
     {
         config([
