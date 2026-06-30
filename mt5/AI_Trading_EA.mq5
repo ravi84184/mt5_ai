@@ -3,7 +3,7 @@
 //| AI Trading Platform - MetaTrader 5 Expert Advisor                |
 //+------------------------------------------------------------------+
 #property copyright "MT5 AI Trading Platform"
-#property version   "2.00"
+#property version   "2.01"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -90,8 +90,11 @@ int OnInit()
          " | AI=", g_aiProvider);
    Print("API: ", InpApiBaseUrl, " | Account: ", AccountInfoInteger(ACCOUNT_LOGIN));
 
+   // Prevent OnTick from sending the same bar twice right after attach
+   g_lastBarTime = iTime(_Symbol, InpTimeframe, 0);
+
    if(g_tradingEnabled && g_symbolCount > 0)
-      SendMarketData();
+      SendMarketData("EA startup");
 
    if(InpShowButtons)
       CreateManualButtons();
@@ -123,7 +126,7 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          Print("No symbols configured in Super Admin (/admin/accounts)");
          return;
       }
-      SendMarketData();
+      SendMarketData("manual button");
    }
    else if(sparam == BTN_MANAGE)
    {
@@ -198,7 +201,7 @@ void OnTick()
    g_lastBarTime = barTime;
 
    if(g_tradingEnabled && g_symbolCount > 0)
-      SendMarketData();
+      SendMarketData("new " + TimeframeToString(InpTimeframe) + " bar");
 
    SendOpenPositionsAnalysis();
 }
@@ -386,20 +389,24 @@ string Trim(string value)
 }
 
 //+------------------------------------------------------------------+
-void SendMarketData()
+void SendMarketData(const string reason = "")
 {
    if(g_symbolCount <= 0)
    {
-      Print("Market data skipped — no symbols configured in Super Admin");
+      Print("[MarketData] Skipped — no symbols configured in Super Admin");
       return;
    }
+
+   string tag = (reason == "") ? "unspecified" : reason;
+   Print("[MarketData] Sending to AI (", tag, ") | symbols=", g_symbolCount,
+         " | account=", (int)AccountInfoInteger(ACCOUNT_LOGIN));
 
    string json = BuildMarketDataJson();
    string response;
    if(HttpPost(InpApiBaseUrl + "/market-data", json, response))
-      Print("Market data sent: ", response);
+      Print("[MarketData] OK: ", response);
    else
-      Print("Market data FAILED. Response: ", response);
+      Print("[MarketData] FAILED: ", response);
 }
 
 //+------------------------------------------------------------------+
@@ -604,19 +611,28 @@ string BuildCandlesJson(string symbol, ENUM_TIMEFRAMES tf)
 //+------------------------------------------------------------------+
 void PollSignals()
 {
+   int accountLogin = (int)AccountInfoInteger(ACCOUNT_LOGIN);
+   Print("[Signal] Checking pending trade for account ", accountLogin, "...");
+
    if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED))
    {
-      Print("Signal poll skipped — AutoTrading disabled (enable Algo Trading in MT5)");
+      Print("[Signal] Skipped — AutoTrading disabled (enable Algo Trading in MT5)");
       return;
    }
 
-   string url = InpApiBaseUrl + "/signals?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
+   string url = InpApiBaseUrl + "/signals?account=" + IntegerToString(accountLogin);
    string response;
    if(!HttpGet(url, response))
+   {
+      Print("[Signal] HTTP failed — could not reach ", url);
       return;
+   }
 
    if(StringFind(response, "NO_SIGNAL") >= 0)
+   {
+      Print("[Signal] Server response: NO_SIGNAL (no trade to execute)");
       return;
+   }
 
    int signalId = (int)JsonGetInt(response, "id");
    string symbol = JsonGetString(response, "symbol");
@@ -630,30 +646,31 @@ void PollSignals()
 
    if(signalId <= 0 || symbol == "" || (action != "BUY" && action != "SELL"))
    {
-      Print("Signal parse failed: ", response);
+      Print("[Signal] Parse failed — invalid payload: ", response);
       return;
    }
 
-   Print("Pending signal #", signalId, ": ", action, " ", symbol,
-         " conf=", confidence, " entry=", entry, " sl=", sl, " tp=", tp);
+   Print("[Signal] Found pending #", signalId, ": ", action, " ", symbol,
+         " | conf=", confidence, "% | entry=", entry, " sl=", sl, " tp=", tp);
 
    if(!SymbolSelect(symbol, true))
    {
-      Print("Signal rejected: symbol not available on broker — ", symbol);
+      Print("[Signal] Rejected — symbol not on broker: ", symbol);
       NotifySignalFailed(signalId, "Symbol not available on broker: " + symbol);
       return;
    }
 
-   if(CountOpenTrades() >= g_maxOpenTrades)
+   int openCount = CountOpenTrades();
+   if(openCount >= g_maxOpenTrades)
    {
-      Print("Signal rejected: max open trades reached (", g_maxOpenTrades, ")");
+      Print("[Signal] Rejected — open trades ", openCount, "/", g_maxOpenTrades);
       NotifySignalFailed(signalId, "Max open trades reached on MT5");
       return;
    }
 
    if(HasOpenPosition(symbol))
    {
-      Print("Signal rejected: position already open on ", symbol);
+      Print("[Signal] Rejected — already in position on ", symbol);
       NotifySignalFailed(signalId, "Position already open on " + symbol);
       return;
    }
@@ -662,19 +679,21 @@ void PollSignals()
       ? SymbolInfoDouble(symbol, SYMBOL_ASK)
       : SymbolInfoDouble(symbol, SYMBOL_BID);
 
+   Print("[Signal] Market price ", symbol, " = ", marketPrice, " | validating SL/TP...");
+
    if(entry <= 0)
       entry = marketPrice;
 
    if(sl <= 0 || tp <= 0)
    {
-      Print("Signal rejected: missing stop_loss or take_profit");
+      Print("[Signal] Rejected — missing stop_loss or take_profit");
       NotifySignalFailed(signalId, "Missing stop_loss or take_profit");
       return;
    }
 
    if(!NormalizeStopsForBroker(symbol, action, sl, tp, marketPrice))
    {
-      Print("Signal rejected: invalid SL/TP for broker stops level");
+      Print("[Signal] Rejected — SL/TP invalid for broker stops level (sl=", sl, " tp=", tp, ")");
       NotifySignalFailed(signalId, "Invalid SL/TP for broker minimum stop distance");
       return;
    }
@@ -682,11 +701,12 @@ void PollSignals()
    double lot = CalculateLotSize(symbol, entry, sl);
    if(lot <= 0)
    {
-      Print("Signal rejected: lot size is zero");
+      Print("[Signal] Rejected — calculated lot size is zero");
       NotifySignalFailed(signalId, "Calculated lot size is zero");
       return;
    }
 
+   Print("[Signal] Executing ", action, " ", symbol, " lot=", lot, " sl=", sl, " tp=", tp);
    bool success = ExecuteSignalTrade(symbol, action, lot, sl, tp, signalId);
    if(success)
    {
@@ -696,15 +716,15 @@ void PollSignals()
       double fillPrice = trade.ResultPrice();
       if(fillPrice <= 0)
          fillPrice = marketPrice;
-      Print("Trade executed: ", action, " ", symbol, " lot=", lot, " ticket=", ticket, " price=", fillPrice);
+      Print("[Signal] EXECUTED ", action, " ", symbol, " lot=", lot, " ticket=", ticket, " price=", fillPrice);
       NotifySignalExecuted(signalId, ticket, symbol, action, lot, fillPrice);
    }
    else
    {
-      string err = "Trade failed retcode=" + IntegerToString((int)trade.ResultRetcode())
+      string err = "retcode=" + IntegerToString((int)trade.ResultRetcode())
          + " err=" + IntegerToString(GetLastError())
          + " comment=" + trade.ResultComment();
-      Print("Trade FAILED: ", action, " ", symbol, " — ", err);
+      Print("[Signal] EXECUTION FAILED ", action, " ", symbol, " — ", err);
    }
 }
 
