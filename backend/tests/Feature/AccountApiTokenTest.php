@@ -96,6 +96,8 @@ class AccountApiTokenTest extends TestCase
         ]);
 
         $oldToken = $account->generateApiToken();
+        $account->refresh();
+        $this->assertSame($oldToken, $account->plainApiToken());
 
         $this->withSession(['admin_authenticated' => true])
             ->post(route('admin.accounts.generate-token', $account))
@@ -103,6 +105,9 @@ class AccountApiTokenTest extends TestCase
 
         $newToken = session('api_token');
         $this->assertNotSame($oldToken, $newToken);
+
+        $account->refresh();
+        $this->assertSame($newToken, $account->plainApiToken());
 
         $this->getJson('/api/account-config?account=104392039', [
             'X-API-TOKEN' => $oldToken,
@@ -114,5 +119,26 @@ class AccountApiTokenTest extends TestCase
 
         $account->refresh();
         $this->assertFalse($account->hasApiToken());
+        $this->assertNull($account->plainApiToken());
+    }
+
+    public function test_admin_account_page_shows_viewable_api_token(): void
+    {
+        config(['admin.password' => 'test-admin-secret']);
+
+        $account = Account::create([
+            'mt5_login' => 104392039,
+            'balance' => 10000,
+            'equity' => 10000,
+            'free_margin' => 9500,
+        ]);
+
+        $token = $account->generateApiToken();
+
+        $this->withSession(['admin_authenticated' => true])
+            ->get(route('admin.accounts.show', $account))
+            ->assertOk()
+            ->assertSee('InpApiToken', false)
+            ->assertSee('data-api-token-value="'.$token.'"', false);
     }
 }

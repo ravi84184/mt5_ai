@@ -1,8 +1,8 @@
 @if (session('api_token'))
     <div class="alert" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fde68a;margin-bottom:1rem">
-        <p style="margin:0 0 0.5rem"><strong>API token (copy now — shown once)</strong></p>
-        <code id="api-token-value" style="display:block;word-break:break-all;padding:0.5rem;background:#020617;border-radius:0.375rem">{{ session('api_token') }}</code>
-        <p style="margin:0.75rem 0 0;font-size:0.875rem">Paste into MT5 EA input <strong>InpApiToken</strong> for this account.</p>
+        <p style="margin:0 0 0.5rem"><strong>New API token generated</strong></p>
+        @include('admin.accounts.partials.api-token-display', ['token' => session('api_token')])
+        <p style="margin:0.75rem 0 0;font-size:0.875rem">Paste into MT5 EA <strong>InpApiToken</strong>. You can also view it anytime on the account page.</p>
     </div>
 @endif
 

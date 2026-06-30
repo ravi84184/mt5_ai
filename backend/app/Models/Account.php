@@ -9,10 +9,18 @@ use Illuminate\Support\Str;
 
 class Account extends Model
 {
+    /**
+     * @var list<string>
+     */
+    protected $hidden = [
+        'api_token_secret',
+    ];
+
     protected $fillable = [
         'mt5_login',
         'broker',
         'api_token_hash',
+        'api_token_secret',
         'api_token_created_at',
         'ai_provider',
         'symbols',
@@ -32,6 +40,7 @@ class Account extends Model
         return [
             'symbols' => 'array',
             'trading_enabled' => 'boolean',
+            'api_token_secret' => 'encrypted',
             'api_token_created_at' => 'datetime',
             'balance' => 'decimal:2',
             'equity' => 'decimal:2',
@@ -84,12 +93,29 @@ class Account extends Model
         return $this->api_token_hash !== null;
     }
 
+    public function hasViewableApiToken(): bool
+    {
+        $token = $this->api_token_secret;
+
+        return is_string($token) && $token !== '';
+    }
+
+    public function plainApiToken(): ?string
+    {
+        if (! $this->hasViewableApiToken()) {
+            return null;
+        }
+
+        return $this->api_token_secret;
+    }
+
     public function generateApiToken(): string
     {
         $plainToken = Str::random(64);
 
         $this->update([
             'api_token_hash' => static::hashApiToken($plainToken),
+            'api_token_secret' => $plainToken,
             'api_token_created_at' => now(),
         ]);
 
@@ -100,6 +126,7 @@ class Account extends Model
     {
         $this->update([
             'api_token_hash' => null,
+            'api_token_secret' => null,
             'api_token_created_at' => null,
         ]);
     }

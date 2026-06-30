@@ -43,25 +43,37 @@
     @endif
 
     <section class="panel" style="margin-bottom:1.5rem;max-width:40rem">
-        <div class="panel-header"><h2>MT5 API token</h2></div>
+        <div class="panel-header"><h2>MT5 API token (InpApiToken)</h2></div>
         <div style="padding:1rem">
-            @if ($account->hasApiToken())
-                <p style="margin:0 0 1rem">A token is active for this account. It is stored hashed — you cannot view it again.</p>
-                <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}" style="display:inline;margin-right:0.5rem">
-                    @csrf
-                    <button type="submit" class="btn btn-primary" onclick="return confirm('Generate a new token? The old token will stop working immediately.')">Regenerate token</button>
-                </form>
-                <form method="POST" action="{{ route('admin.accounts.revoke-token', $account) }}" style="display:inline">
-                    @csrf
-                    <button type="submit" class="btn" onclick="return confirm('Revoke API token? The EA will lose access until a new token is set.')">Revoke token</button>
-                </form>
+            @if ($account->hasViewableApiToken())
+                <p style="margin:0 0 0.75rem">Copy this value into MT5 EA <code>InpApiToken</code> for account {{ $account->mt5_login }}.</p>
+                @include('admin.accounts.partials.api-token-display', ['token' => $account->plainApiToken()])
+                <p style="margin:0.75rem 0 0;font-size:0.875rem;color:#94a3b8">
+                    Active since {{ $account->api_token_created_at?->format('M j, Y H:i') }} UTC. Stored encrypted in the database.
+                </p>
+            @elseif ($account->hasApiToken())
+                <p style="margin:0 0 1rem">A token is active but was created before viewable storage was enabled. Regenerate to view and copy it here.</p>
             @else
                 <p style="margin:0 0 1rem">No API token yet. Generate one and paste it into MT5 EA <code>InpApiToken</code>.</p>
-                <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}">
-                    @csrf
-                    <button type="submit" class="btn btn-primary">Generate API token</button>
-                </form>
             @endif
+
+            <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+                @if ($account->hasApiToken())
+                    <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}" style="display:inline">
+                        @csrf
+                        <button type="submit" class="btn btn-primary" onclick="return confirm('Generate a new token? The old token will stop working immediately.')">Regenerate token</button>
+                    </form>
+                    <form method="POST" action="{{ route('admin.accounts.revoke-token', $account) }}" style="display:inline">
+                        @csrf
+                        <button type="submit" class="btn" onclick="return confirm('Revoke API token? The EA will lose access until a new token is set.')">Revoke token</button>
+                    </form>
+                @else
+                    <form method="POST" action="{{ route('admin.accounts.generate-token', $account) }}">
+                        @csrf
+                        <button type="submit" class="btn btn-primary">Generate API token</button>
+                    </form>
+                @endif
+            </div>
         </div>
     </section>
 

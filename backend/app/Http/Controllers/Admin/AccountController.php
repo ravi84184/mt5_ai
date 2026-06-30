@@ -71,7 +71,7 @@ class AccountController extends Controller
 
             return $redirect
                 ->with('api_token', $plainToken)
-                ->with('status', "Account {$account->mt5_login} created. Copy the API token below into MT5 InpApiToken — it is shown only once.");
+                ->with('status', "Account {$account->mt5_login} created. Copy the API token below into MT5 InpApiToken.");
         }
 
         return $redirect;
@@ -134,7 +134,7 @@ class AccountController extends Controller
         return redirect()
             ->route('admin.accounts.show', $account)
             ->with('api_token', $plainToken)
-            ->with('status', 'New API token generated. Copy it into MT5 InpApiToken now — it will not be shown again.');
+            ->with('status', 'New API token generated. Copy it into MT5 InpApiToken — the previous token no longer works.');
     }
 
     public function revokeToken(Account $account): RedirectResponse
