@@ -153,8 +153,14 @@ class SignalController extends Controller
 
         $decision->update(['status' => 'FETCHED']);
 
+        $trade = Trade::where('account_id', $account->id)
+            ->where('ticket', $decision->ticket)
+            ->first();
+
         return response()->json([
+            'id' => $decision->id,
             'ticket' => $decision->ticket,
+            'symbol' => $trade?->symbol ?? '',
             'action' => $decision->action,
             'new_sl' => $decision->new_sl !== null ? (float) $decision->new_sl : null,
             'close_volume' => $decision->close_volume !== null ? (float) $decision->close_volume : null,
@@ -165,22 +171,40 @@ class SignalController extends Controller
     public function managementApplied(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'decision_id' => ['nullable', 'integer'],
             'ticket' => ['required', 'integer'],
             'action' => ['required', 'string'],
             'status' => ['required', 'string'],
+            'position_ticket' => ['nullable', 'integer'],
         ]);
 
-        $decision = PositionManagementDecision::where('ticket', $validated['ticket'])
-            ->where('status', 'FETCHED')
-            ->first();
+        $decisionQuery = PositionManagementDecision::query()->where('status', 'FETCHED');
+
+        if (! empty($validated['decision_id'])) {
+            $decisionQuery->where('id', $validated['decision_id']);
+        } else {
+            $decisionQuery->where('ticket', $validated['ticket']);
+        }
+
+        $decision = $decisionQuery->first();
 
         if ($decision && ($response = $this->denyIfWrongAccountId($request, $decision->account_id))) {
             return $response;
         }
 
-        PositionManagementDecision::where('ticket', $validated['ticket'])
-            ->where('status', 'FETCHED')
-            ->update(['status' => strtoupper($validated['status'])]);
+        if ($decision) {
+            $decision->update(['status' => strtoupper($validated['status'])]);
+
+            if (! empty($validated['position_ticket']) && (int) $validated['position_ticket'] !== (int) $decision->ticket) {
+                Trade::where('account_id', $decision->account_id)
+                    ->where('ticket', $decision->ticket)
+                    ->update(['ticket' => $validated['position_ticket']]);
+            }
+        } else {
+            PositionManagementDecision::where('ticket', $validated['ticket'])
+                ->where('status', 'FETCHED')
+                ->update(['status' => strtoupper($validated['status'])]);
+        }
 
         TradeManagementLog::where('ticket', $validated['ticket'])
             ->where('status', 'PENDING')

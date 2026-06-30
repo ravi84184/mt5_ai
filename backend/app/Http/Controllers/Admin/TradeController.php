@@ -108,6 +108,11 @@ class TradeController extends Controller
             'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
+        PositionManagementDecision::where('account_id', $trade->account_id)
+            ->where('ticket', $trade->ticket)
+            ->where('status', 'PENDING')
+            ->update(['status' => 'CANCELLED']);
+
         PositionManagementDecision::create([
             'ticket' => $trade->ticket,
             'account_id' => $trade->account_id,

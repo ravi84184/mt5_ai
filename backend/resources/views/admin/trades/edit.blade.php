@@ -25,7 +25,11 @@
 
         @if ($trade->status === 'OPEN')
             <section class="panel">
-                <div class="panel-header"><h2>Queue EA action</h2></div>
+                <div class="panel-header"><h2>Queue EA action (applies on MT5)</h2></div>
+                <p style="padding:0 1rem;font-size:0.875rem;color:#94a3b8">
+                    Saving the trade record above only updates the database.
+                    To change stop loss on MT5, use <strong>Queue SL update</strong> below — the EA picks it up on the next poll (~7s).
+                </p>
                 <form method="POST" action="{{ route('admin.trades.close', $trade) }}" style="padding:1rem;border-bottom:1px solid #1e293b">
                     @csrf
                     <div class="form-group"><label>Close position</label><input name="reason" placeholder="Reason"></div>

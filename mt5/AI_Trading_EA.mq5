@@ -3,7 +3,7 @@
 //| AI Trading Platform - MetaTrader 5 Expert Advisor                |
 //+------------------------------------------------------------------+
 #property copyright "MT5 AI Trading Platform"
-#property version   "2.01"
+#property version   "2.03"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -679,10 +679,7 @@ void PollSignals()
       ? SymbolInfoDouble(symbol, SYMBOL_ASK)
       : SymbolInfoDouble(symbol, SYMBOL_BID);
 
-   Print("[Signal] Market price ", symbol, " = ", marketPrice, " | validating SL/TP...");
-
-   if(entry <= 0)
-      entry = marketPrice;
+   Print("[Signal] Market price ", symbol, " = ", marketPrice, " | entry=", entry, " | validating SL/TP...");
 
    if(sl <= 0 || tp <= 0)
    {
@@ -691,14 +688,22 @@ void PollSignals()
       return;
    }
 
-   if(!NormalizeStopsForBroker(symbol, action, sl, tp, marketPrice))
+   double origSl = sl;
+   double origTp = tp;
+   if(!NormalizeStopsForBroker(symbol, action, sl, tp, marketPrice, entry))
    {
-      Print("[Signal] Rejected — SL/TP invalid for broker stops level (sl=", sl, " tp=", tp, ")");
-      NotifySignalFailed(signalId, "Invalid SL/TP for broker minimum stop distance");
+      Print("[Signal] Rejected — SL/TP invalid (action=", action,
+            " market=", marketPrice, " entry=", entry,
+            " sl=", origSl, " tp=", origTp, ")");
+      NotifySignalFailed(signalId, "Invalid SL/TP relative to current market price");
       return;
    }
 
-   double lot = CalculateLotSize(symbol, entry, sl);
+   if(sl != origSl || tp != origTp)
+      Print("[Signal] SL/TP adjusted for current price: sl ", origSl, " → ", sl,
+            " | tp ", origTp, " → ", tp);
+
+   double lot = CalculateLotSize(symbol, (entry > 0 ? entry : marketPrice), sl);
    if(lot <= 0)
    {
       Print("[Signal] Rejected — calculated lot size is zero");
@@ -710,14 +715,16 @@ void PollSignals()
    bool success = ExecuteSignalTrade(symbol, action, lot, sl, tp, signalId);
    if(success)
    {
-      ulong ticket = trade.ResultDeal();
-      if(ticket == 0)
-         ticket = trade.ResultOrder();
+      ulong posTicket = FindPositionTicket(symbol);
+      if(posTicket == 0)
+         posTicket = trade.ResultDeal();
+      if(posTicket == 0)
+         posTicket = trade.ResultOrder();
       double fillPrice = trade.ResultPrice();
       if(fillPrice <= 0)
          fillPrice = marketPrice;
-      Print("[Signal] EXECUTED ", action, " ", symbol, " lot=", lot, " ticket=", ticket, " price=", fillPrice);
-      NotifySignalExecuted(signalId, ticket, symbol, action, lot, fillPrice);
+      Print("[Signal] EXECUTED ", action, " ", symbol, " lot=", lot, " posTicket=", posTicket, " price=", fillPrice);
+      NotifySignalExecuted(signalId, posTicket, symbol, action, lot, fillPrice);
    }
    else
    {
@@ -755,7 +762,8 @@ bool ExecuteSignalTrade(string symbol, string action, double lot, double sl, dou
 }
 
 //+------------------------------------------------------------------+
-bool NormalizeStopsForBroker(string symbol, string action, double &sl, double &tp, double marketPrice)
+bool NormalizeStopsForBroker(string symbol, string action, double &sl, double &tp,
+                            double marketPrice, double entry)
 {
    double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
    if(point <= 0)
@@ -764,15 +772,31 @@ bool NormalizeStopsForBroker(string symbol, string action, double &sl, double &t
    int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    int stopsLevel = (int)SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
    double minDist = stopsLevel * point;
+   if(minDist <= 0)
+      minDist = point * 10;
 
    sl = NormalizeDouble(sl, digits);
    tp = NormalizeDouble(tp, digits);
    marketPrice = NormalizeDouble(marketPrice, digits);
 
+   if(entry <= 0)
+      entry = marketPrice;
+   else
+      entry = NormalizeDouble(entry, digits);
+
+   double slDist = 0;
+   double tpDist = 0;
+
    if(action == "BUY")
    {
-      if(sl >= marketPrice || tp <= marketPrice)
+      slDist = entry - sl;
+      tpDist = tp - entry;
+      if(slDist <= 0 || tpDist <= 0)
          return false;
+
+      sl = NormalizeDouble(marketPrice - slDist, digits);
+      tp = NormalizeDouble(marketPrice + tpDist, digits);
+
       if(minDist > 0)
       {
          if((marketPrice - sl) < minDist)
@@ -780,21 +804,28 @@ bool NormalizeStopsForBroker(string symbol, string action, double &sl, double &t
          if((tp - marketPrice) < minDist)
             tp = NormalizeDouble(marketPrice + minDist, digits);
       }
-   }
-   else
-   {
-      if(sl <= marketPrice || tp >= marketPrice)
-         return false;
-      if(minDist > 0)
-      {
-         if((sl - marketPrice) < minDist)
-            sl = NormalizeDouble(marketPrice + minDist, digits);
-         if((marketPrice - tp) < minDist)
-            tp = NormalizeDouble(marketPrice - minDist, digits);
-      }
+
+      return (sl < marketPrice && tp > marketPrice);
    }
 
-   return true;
+   // SELL
+   slDist = sl - entry;
+   tpDist = entry - tp;
+   if(slDist <= 0 || tpDist <= 0)
+      return false;
+
+   sl = NormalizeDouble(marketPrice + slDist, digits);
+   tp = NormalizeDouble(marketPrice - tpDist, digits);
+
+   if(minDist > 0)
+   {
+      if((sl - marketPrice) < minDist)
+         sl = NormalizeDouble(marketPrice + minDist, digits);
+      if((marketPrice - tp) < minDist)
+         tp = NormalizeDouble(marketPrice - minDist, digits);
+   }
+
+   return (sl > marketPrice && tp < marketPrice);
 }
 
 //+------------------------------------------------------------------+
@@ -891,41 +922,82 @@ string BuildPositionAnalysisJson(ulong ticket, string symbol)
 //+------------------------------------------------------------------+
 void PollManagementActions()
 {
-   string url = InpApiBaseUrl + "/signals/management?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
+   int accountLogin = (int)AccountInfoInteger(ACCOUNT_LOGIN);
+   Print("[Mgmt] Checking management actions for account ", accountLogin, "...");
+
+   string url = InpApiBaseUrl + "/signals/management?account=" + IntegerToString(accountLogin);
    string response;
    if(!HttpGet(url, response))
+   {
+      Print("[Mgmt] HTTP failed — could not reach server");
       return;
+   }
 
    if(StringFind(response, "NO_ACTION") >= 0)
+   {
+      Print("[Mgmt] Server response: NO_ACTION");
       return;
+   }
 
-   ulong ticket = (ulong)JsonGetInt(response, "ticket");
+   int decisionId = (int)JsonGetInt(response, "id");
+   ulong storedTicket = (ulong)JsonGetInt(response, "ticket");
+   string symbol = JsonGetString(response, "symbol");
    string action = JsonGetString(response, "action");
    double newSl = JsonGetDouble(response, "new_sl");
    double closeVolume = JsonGetDouble(response, "close_volume");
 
-   if(!PositionSelectByTicket(ticket))
+   StringToUpper(action);
+
+   Print("[Mgmt] Action: ", action, " storedTicket=", storedTicket,
+         " symbol=", symbol, " newSl=", newSl, " reason=", JsonGetString(response, "reason"));
+
+   ulong posTicket = ResolvePositionTicket(storedTicket, symbol);
+   if(posTicket == 0)
+   {
+      Print("[Mgmt] FAILED — open position not found (storedTicket=", storedTicket, " symbol=", symbol, ")");
       return;
+   }
+
+   if(posTicket != storedTicket)
+      Print("[Mgmt] Resolved position ticket ", posTicket, " (database had ", storedTicket, ")");
+
+   if(!PositionSelectByTicket(posTicket))
+   {
+      Print("[Mgmt] FAILED — PositionSelectByTicket(", posTicket, ") failed");
+      return;
+   }
 
    bool applied = false;
-   string symbol = PositionGetString(POSITION_SYMBOL);
+   string posSymbol = PositionGetString(POSITION_SYMBOL);
 
    if(action == "CLOSE")
-      applied = trade.PositionClose(ticket);
+      applied = trade.PositionClose(posTicket);
    else if(action == "MOVE_SL" || action == "MOVE_TO_BREAKEVEN")
-      applied = trade.PositionModify(ticket, newSl, PositionGetDouble(POSITION_TP));
+      applied = ApplyPositionSl(posTicket, newSl);
    else if(action == "PARTIAL_CLOSE" && closeVolume > 0)
-      applied = trade.PositionClosePartial(ticket, closeVolume);
+      applied = trade.PositionClosePartial(posTicket, closeVolume);
+   else
+      Print("[Mgmt] Unknown action: ", action);
 
    if(applied)
    {
+      Print("[Mgmt] APPLIED ", action, " on ", posSymbol, " ticket=", posTicket);
       string json = "{";
-      json += "\"ticket\":" + IntegerToString((long)ticket) + ",";
+      if(decisionId > 0)
+         json += "\"decision_id\":" + IntegerToString(decisionId) + ",";
+      json += "\"ticket\":" + IntegerToString((long)storedTicket) + ",";
+      json += "\"position_ticket\":" + IntegerToString((long)posTicket) + ",";
       json += "\"action\":\"" + action + "\",";
       json += "\"status\":\"APPLIED\"";
       json += "}";
       string applyResponse;
       HttpPost(InpApiBaseUrl + "/signals/management/applied", json, applyResponse);
+   }
+   else
+   {
+      Print("[Mgmt] FAILED ", action, " on ", posSymbol,
+            " retcode=", trade.ResultRetcode(), " err=", GetLastError(),
+            " comment=", trade.ResultComment());
    }
 }
 
@@ -984,6 +1056,81 @@ bool HasOpenPosition(string symbol)
          return true;
    }
    return false;
+}
+
+//+------------------------------------------------------------------+
+ulong FindPositionTicket(string symbol)
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+      if(PositionGetString(POSITION_SYMBOL) == symbol)
+         return ticket;
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+ulong ResolvePositionTicket(ulong storedTicket, string symbol)
+{
+   if(storedTicket > 0 && PositionSelectByTicket(storedTicket))
+      return storedTicket;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(!PositionSelectByTicket(ticket)) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != InpMagicNumber) continue;
+      if(storedTicket > 0 && (ulong)PositionGetInteger(POSITION_IDENTIFIER) == storedTicket)
+         return ticket;
+   }
+
+   if(symbol != "")
+      return FindPositionTicket(symbol);
+
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+bool ApplyPositionSl(ulong posTicket, double newSl)
+{
+   if(!PositionSelectByTicket(posTicket))
+      return false;
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   double tp = PositionGetDouble(POSITION_TP);
+   long posType = PositionGetInteger(POSITION_TYPE);
+   double market = (posType == POSITION_TYPE_BUY)
+      ? SymbolInfoDouble(symbol, SYMBOL_BID)
+      : SymbolInfoDouble(symbol, SYMBOL_ASK);
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   int stopsLevel = (int)SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double minDist = stopsLevel * point;
+   if(minDist <= 0)
+      minDist = point * 10;
+
+   newSl = NormalizeDouble(newSl, digits);
+   market = NormalizeDouble(market, digits);
+
+   if(posType == POSITION_TYPE_BUY)
+   {
+      if(newSl >= market - minDist)
+         newSl = NormalizeDouble(market - minDist, digits);
+   }
+   else
+   {
+      if(newSl <= market + minDist)
+         newSl = NormalizeDouble(market + minDist, digits);
+   }
+
+   Print("[Mgmt] PositionModify ticket=", posTicket, " newSl=", newSl, " tp=", tp, " market=", market);
+   return trade.PositionModify(posTicket, newSl, tp);
 }
 
 //+------------------------------------------------------------------+
