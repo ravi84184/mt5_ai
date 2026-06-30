@@ -6,8 +6,12 @@ use InvalidArgumentException;
 
 class AiServiceFactory
 {
-    public static function make(?string $provider = null): AiServiceInterface
+    public static function make(?string $provider = null, bool $useConsensus = true): AiServiceInterface
     {
+        if ($useConsensus && config('trading.ai.consensus.enabled', false)) {
+            return app(ConsensusAiService::class);
+        }
+
         $provider = AiProviderConfig::normalize($provider);
 
         return match ($provider) {
@@ -18,11 +22,15 @@ class AiServiceFactory
         };
     }
 
-    public static function makeConfigured(?string $provider = null): AiServiceInterface
+    public static function makeConfigured(?string $provider = null, bool $useConsensus = true): AiServiceInterface
     {
+        if ($useConsensus && config('trading.ai.consensus.enabled', false)) {
+            return app(ConsensusAiService::class);
+        }
+
         $provider = AiProviderConfig::normalize($provider);
         AiProviderConfig::ensureConfigured($provider);
 
-        return self::make($provider);
+        return self::make($provider, false);
     }
 }

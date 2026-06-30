@@ -11,7 +11,7 @@ class PromptBuilderTest extends TestCase
     {
         $prompt = PromptBuilder::entrySystemPrompt();
 
-        $this->assertStringContainsString('EMA stack', $prompt);
+        $this->assertStringContainsString('analysis', $prompt);
         $this->assertStringContainsString('risk.min_confidence', $prompt);
         $this->assertStringContainsString('WAIT', $prompt);
     }

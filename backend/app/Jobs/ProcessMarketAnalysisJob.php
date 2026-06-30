@@ -8,10 +8,15 @@ use App\Jobs\Concerns\AppliesTradingSettings;
 use App\Models\Account;
 use App\Models\MarketSnapshot;
 use App\Models\Signal;
+use App\Services\AI\AiContextBuilder;
 use App\Services\AI\AiInteractionLogger;
 use App\Services\AI\AiServiceFactory;
+use App\Services\AI\MarketContextEnricher;
 use App\Services\AI\PromptBuilder;
+use App\Services\Notifications\TelegramNotificationService;
+use App\Services\PreTradeFilterService;
 use App\Services\RiskManagementService;
+use App\Services\SignalValidatorService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -31,8 +36,12 @@ class ProcessMarketAnalysisJob implements ShouldQueue
         public array $payload,
     ) {}
 
-    public function handle(RiskManagementService $riskService): void
-    {
+    public function handle(
+        RiskManagementService $riskService,
+        PreTradeFilterService $preFilter,
+        SignalValidatorService $signalValidator,
+        TelegramNotificationService $telegram,
+    ): void {
         $this->applyTradingSettings();
 
         $account = Account::findOrFail($this->accountId);
@@ -50,7 +59,9 @@ class ProcessMarketAnalysisJob implements ShouldQueue
             return;
         }
 
-        $provider = $account->resolvedAiProvider();
+        $provider = config('trading.ai.consensus.enabled', false)
+            ? 'consensus'
+            : $account->resolvedAiProvider();
 
         try {
             $ai = AiServiceFactory::makeConfigured($provider);
@@ -77,26 +88,26 @@ class ProcessMarketAnalysisJob implements ShouldQueue
                 'snapshot_json' => $symbolData,
             ]);
 
-            $hasOpenTrade = $account->trades()
-                ->where('symbol', $symbol)
-                ->where('status', 'OPEN')
-                ->exists();
-
-            if ($hasOpenTrade) {
+            if ($account->trades()->where('symbol', $symbol)->where('status', 'OPEN')->exists()) {
                 continue;
             }
 
-            $context = [
-                'account' => [
-                    'balance' => $account->balance,
-                    'equity' => $account->equity,
-                ],
-                'symbol' => $symbolData,
-                'risk' => array_merge(config('trading.risk'), [
-                    'min_confidence' => $account->resolvedMinConfidence(),
-                    'max_open_trades' => $account->resolvedMaxOpenTrades(),
-                ]),
-            ];
+            $enriched = MarketContextEnricher::enrich($symbolData);
+            $context = AiContextBuilder::buildEntryContext($account, $symbolData, $enriched, $symbol);
+
+            if ($skipReason = $preFilter->getSkipReason($symbolData, $enriched)) {
+                Signal::create([
+                    'account_id' => $account->id,
+                    'symbol' => $symbol,
+                    'action' => SignalAction::Wait->value,
+                    'confidence' => 0,
+                    'reason' => $skipReason,
+                    'status' => SignalStatus::Rejected,
+                    'rejection_reason' => "Pre-filter: {$skipReason}",
+                    'ai_provider' => 'prefilter',
+                ]);
+                continue;
+            }
 
             $systemPrompt = PromptBuilder::entrySystemPrompt();
             $userPrompt = PromptBuilder::entryUserPrompt($context);
@@ -108,22 +119,10 @@ class ProcessMarketAnalysisJob implements ShouldQueue
             } catch (\Throwable $e) {
                 $durationMs = (int) ((microtime(true) - $startedAt) * 1000);
                 AiInteractionLogger::logError(
-                    'entry',
-                    $context,
-                    $systemPrompt,
-                    $userPrompt,
-                    $e->getMessage(),
-                    $durationMs,
-                    $account->id,
-                    $symbol,
-                    null,
-                    $provider,
+                    'entry', $context, $systemPrompt, $userPrompt, $e->getMessage(),
+                    $durationMs, $account->id, $symbol, null, $provider,
                 );
-                Log::error('AI entry analysis failed', [
-                    'account_id' => $account->id,
-                    'symbol' => $symbol,
-                    'error' => $e->getMessage(),
-                ]);
+                Log::error('AI entry analysis failed', ['account_id' => $account->id, 'symbol' => $symbol, 'error' => $e->getMessage()]);
                 continue;
             }
 
@@ -143,24 +142,27 @@ class ProcessMarketAnalysisJob implements ShouldQueue
             ]);
 
             AiInteractionLogger::logSuccess(
-                'entry',
-                $context,
-                $systemPrompt,
-                $userPrompt,
-                $decision,
-                $durationMs,
-                $account->id,
-                $signal->id,
-                $signal->symbol,
-                null,
-                $provider,
+                'entry', $context, $systemPrompt, $userPrompt, $decision,
+                $durationMs, $account->id, $signal->id, $signal->symbol, null, $provider,
             );
 
+            if ($action === SignalAction::Wait) {
+                $signal->update(['status' => SignalStatus::Rejected, 'rejection_reason' => 'AI returned WAIT']);
+                $telegram->notifySignalRejected($signal->fresh(), $account);
+                continue;
+            }
+
+            if ($validationReason = $signalValidator->getRejectionReason($signal, $symbolData)) {
+                $signal->update(['status' => SignalStatus::Rejected, 'rejection_reason' => "Signal validator: {$validationReason}"]);
+                $telegram->notifySignalRejected($signal->fresh(), $account);
+                continue;
+            }
+
             if ($rejection = $riskService->getRejectionReason($account, $signal)) {
-                $signal->update([
-                    'status' => SignalStatus::Rejected,
-                    'rejection_reason' => $rejection,
-                ]);
+                $signal->update(['status' => SignalStatus::Rejected, 'rejection_reason' => $rejection]);
+                $telegram->notifySignalRejected($signal->fresh(), $account);
+            } else {
+                $telegram->notifySignalReady($signal->fresh(), $account);
             }
         }
     }

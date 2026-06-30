@@ -55,7 +55,7 @@ class AccountController extends Controller
         $account = Account::create([
             'mt5_login' => $validated['mt5_login'],
             'broker' => $validated['broker'] ?? null,
-            'ai_provider' => $validated['ai_provider'] ?: null,
+            'ai_provider' => ($validated['ai_provider'] ?? null) ?: null,
             'symbols' => $symbols === [] ? null : $symbols,
             'trading_enabled' => $request->boolean('trading_enabled'),
             'min_confidence' => $validated['min_confidence'] ?? null,
@@ -114,7 +114,7 @@ class AccountController extends Controller
 
         $account->update([
             'broker' => $validated['broker'] ?? null,
-            'ai_provider' => $validated['ai_provider'] ?: null,
+            'ai_provider' => ($validated['ai_provider'] ?? null) ?: null,
             'symbols' => $symbols === [] ? null : $symbols,
             'trading_enabled' => $request->boolean('trading_enabled'),
             'min_confidence' => $validated['min_confidence'] ?? null,

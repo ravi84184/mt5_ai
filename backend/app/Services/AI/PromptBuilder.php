@@ -6,52 +6,28 @@ class PromptBuilder
 {
     public static function entrySystemPrompt(): string
     {
-        return <<<'PROMPT'
+        $minRr = config('trading.ai_entry.min_risk_reward', 2.0);
+        $strategy = config('trading.ai_entry.strategy', 'balanced');
+
+        return <<<PROMPT
 You are an expert MT5 trading analyst for forex, metals, and crypto CFDs.
 
-Your job: evaluate ONE symbol snapshot and decide whether to enter a trade. Be selective — most bars should be WAIT.
+Evaluate the JSON payload and return ONE trade decision. Be selective — most bars should be WAIT.
 
-## Input you receive
-- account.balance / account.equity — account size
-- symbol.symbol, symbol.timeframe — instrument and chart period
-- symbol.indicators — ema20, ema50, ema200, rsi (0–100), atr (average true range in price units)
-- symbol.candles — recent OHLCV bars (oldest → newest; last candle is most recent closed bar)
-- risk.min_confidence — minimum confidence required for BUY/SELL to be accepted (signals below this are rejected)
-- risk.max_risk_per_trade_pct — target risk per trade as % of balance (use for SL distance sanity check)
-- risk.max_open_trades — portfolio limit (informational)
+When `analysis` is present, use it first (pre-computed MTF alignment, confluence, key levels, volatility, session).
+Strategy mode: {$strategy}
 
-## Analysis framework (apply in order)
-1. **Trend (EMA stack)** — bullish: price/close above ema20 > ema50 > ema200; bearish: inverse; mixed = weaker trend
-2. **Momentum (RSI)** — >70 overbought, <30 oversold; prefer entries with RSI supporting direction (e.g. BUY on pullback RSI 40–60 in uptrend)
-3. **Structure (candles)** — recent highs/lows, rejection wicks, breakout or range; avoid chasing extended moves
-4. **Volatility (ATR)** — size stop-loss using ATR (typical SL distance: 1.0–2.0 × atr from entry); TP should offer reward:risk ≥ 1.5:1 unless strong trend
+Rules:
+- If news.in_blackout is true → action MUST be WAIT
+- Follow recent_performance.guidance — avoid revenge trading
+- For gold (XAUUSD/PAXG): inverse DXY trend in correlation.dxy_trend can support direction
+- Do NOT BUY if analysis.multi_timeframe.alignment is bearish; do NOT SELL if bullish
+- stop_loss / take_profit must satisfy minimum R:R 1:{$minRr}
+- Use analysis.suggested_atr_levels as baseline when unsure
+- confidence must be ≥ risk.min_confidence for BUY/SELL
 
-## Decision rules
-- Return **WAIT** when: trend unclear, conflicting signals, low volatility chop, RSI extreme without confirmation, or setup quality is mediocre
-- Return **BUY** or **SELL** only when trend + momentum + structure align
-- **confidence** 0–100: honest calibration — 90+ only for exceptional confluence; 70–85 good setup; <70 → prefer WAIT
-- For BUY/SELL: confidence MUST be ≥ risk.min_confidence or the trade will be rejected
-- **entry_price**: use latest closed candle close (or logical limit near current structure)
-- **stop_loss**: beyond recent swing invalidation; distance ≈ 1.0–2.5 × atr; never inside noise
-- **take_profit**: logical target (structure, measured move, or ≥1.5× SL distance)
-- **reason**: max 200 chars, cite specific evidence (e.g. "EMA bull stack, RSI 55, breakout above range high")
-
-## Output
-Return a single JSON object only. No markdown, no commentary, no extra keys.
-
-Schema:
-{
-  "symbol": "XAUUSD",
-  "action": "BUY",
-  "confidence": 84,
-  "entry_price": 3365.5,
-  "stop_loss": 3350.0,
-  "take_profit": 3395.0,
-  "reason": "Bullish EMA alignment, RSI 58, closed above ema20"
-}
-
-action must be exactly: BUY | SELL | WAIT
-For WAIT: set confidence < 70, entry_price/stop_loss/take_profit may be 0 or last close
+Return JSON only:
+{"symbol":"XAUUSD","action":"BUY","confidence":84,"entry_price":3365.5,"stop_loss":3350,"take_profit":3395,"reason":"..."}
 PROMPT;
     }
 
@@ -60,15 +36,19 @@ PROMPT;
      */
     public static function entryUserPrompt(array $context): string
     {
-        $symbol = $context['symbol']['symbol'] ?? 'UNKNOWN';
-        $timeframe = $context['symbol']['timeframe'] ?? 'M15';
+        $symbolBlock = $context['symbol'] ?? [];
+        $symbol = is_array($symbolBlock) ? ($symbolBlock['symbol'] ?? 'UNKNOWN') : (string) $symbolBlock;
+        $timeframe = is_array($symbolBlock) ? ($symbolBlock['timeframe'] ?? 'M15') : 'M15';
         $risk = $context['risk'] ?? [];
         $minConfidence = (int) ($risk['min_confidence'] ?? 80);
+        $indicators = is_array($symbolBlock) ? ($symbolBlock['indicators'] ?? []) : [];
+        $candles = is_array($symbolBlock) ? ($symbolBlock['candles'] ?? $symbolBlock['recent_candles'] ?? []) : [];
+        $latestClose = self::latestClose($candles);
         $riskPct = (float) ($risk['max_risk_per_trade_pct'] ?? 1.0);
-        $indicators = $context['symbol']['indicators'] ?? [];
-        $latestClose = self::latestClose($context['symbol']['candles'] ?? []);
+        $hasAnalysis = ! empty($context['analysis']);
         $ema20 = $indicators['ema20'] ?? 'n/a';
         $ema50 = $indicators['ema50'] ?? 'n/a';
+        $analysisNote = $hasAnalysis ? 'Pre-computed analysis block included — prefer it over raw candles.' : '';
         $ema200 = $indicators['ema200'] ?? 'n/a';
         $rsi = $indicators['rsi'] ?? 'n/a';
         $atr = $indicators['atr'] ?? 'n/a';
@@ -79,7 +59,7 @@ Analyze {$symbol} on {$timeframe} for a new entry.
 Constraints for this account:
 - Minimum confidence for executable BUY/SELL: {$minConfidence}
 - Target risk per trade: {$riskPct}% of balance
-- Only recommend BUY/SELL if confidence ≥ {$minConfidence}; otherwise return WAIT
+{$analysisNote}
 
 Current snapshot:
 - Latest closed price: {$latestClose}

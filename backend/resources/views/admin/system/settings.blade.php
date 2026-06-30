@@ -166,6 +166,8 @@
             </div>
         </section>
 
+        @include('admin.system.settings-pipeline', ['settings' => $settings])
+
         <button type="submit" class="btn btn-primary">Save settings</button>
     </form>
 @endsection

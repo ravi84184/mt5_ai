@@ -435,67 +435,168 @@ string BuildMarketDataJson()
 //+------------------------------------------------------------------+
 string BuildSymbolJson(string symbol, string timeframe)
 {
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+   double ask = SymbolInfoDouble(symbol, SYMBOL_ASK);
+   double spread = (double)SymbolInfoInteger(symbol, SYMBOL_SPREAD);
+
    string json = "{";
    json += "\"symbol\":\"" + symbol + "\",";
    json += "\"timeframe\":\"" + timeframe + "\",";
-   json += "\"indicators\":" + BuildIndicatorsJson(symbol) + ",";
-   json += "\"candles\":" + BuildCandlesJson(symbol);
+   json += "\"market\":{";
+   json += "\"bid\":" + DoubleToString(bid, digits) + ",";
+   json += "\"ask\":" + DoubleToString(ask, digits) + ",";
+   json += "\"spread\":" + DoubleToString(spread, digits) + ",";
+   json += "\"digits\":" + IntegerToString(digits);
+   json += "},";
+   json += "\"symbol_info\":" + BuildSymbolInfoJson(symbol) + ",";
+   json += "\"session\":" + BuildSessionJson() + ",";
+   json += "\"levels\":" + BuildDailyLevelsJson(symbol) + ",";
+   json += "\"indicators\":" + BuildIndicatorsJson(symbol, InpTimeframe) + ",";
+   json += "\"multi_timeframe\":{";
+   json += "\"H1\":{\"indicators\":" + BuildIndicatorsJson(symbol, PERIOD_H1) + "},";
+   json += "\"H4\":{\"indicators\":" + BuildIndicatorsJson(symbol, PERIOD_H4) + "}";
+   json += "},";
+   json += "\"correlation\":" + BuildCorrelationJson(symbol) + ",";
+   json += "\"candles\":" + BuildCandlesJson(symbol, InpTimeframe);
    json += "}";
    return json;
 }
 
 //+------------------------------------------------------------------+
-string BuildIndicatorsJson(string symbol)
+string BuildSymbolInfoJson(string symbol)
 {
-   int ema20Handle = iMA(symbol, InpTimeframe, 20, 0, MODE_EMA, PRICE_CLOSE);
-   int ema50Handle = iMA(symbol, InpTimeframe, 50, 0, MODE_EMA, PRICE_CLOSE);
-   int ema200Handle = iMA(symbol, InpTimeframe, 200, 0, MODE_EMA, PRICE_CLOSE);
-   int rsiHandle = iRSI(symbol, InpTimeframe, 14, PRICE_CLOSE);
-   int atrHandle = iATR(symbol, InpTimeframe, 14);
-
-   double ema20[1], ema50[1], ema200[1], rsi[1], atr[1];
-   CopyBuffer(ema20Handle, 0, 1, 1, ema20);
-   CopyBuffer(ema50Handle, 0, 1, 1, ema50);
-   CopyBuffer(ema200Handle, 0, 1, 1, ema200);
-   CopyBuffer(rsiHandle, 0, 1, 1, rsi);
-   CopyBuffer(atrHandle, 0, 1, 1, atr);
-
-   IndicatorRelease(ema20Handle);
-   IndicatorRelease(ema50Handle);
-   IndicatorRelease(ema200Handle);
-   IndicatorRelease(rsiHandle);
-   IndicatorRelease(atrHandle);
-
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   int stopsLevel = (int)SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
    string json = "{";
-   json += "\"ema20\":" + DoubleToString(ema20[0], _Digits) + ",";
-   json += "\"ema50\":" + DoubleToString(ema50[0], _Digits) + ",";
-   json += "\"ema200\":" + DoubleToString(ema200[0], _Digits) + ",";
-   json += "\"rsi\":" + DoubleToString(rsi[0], 2) + ",";
-   json += "\"atr\":" + DoubleToString(atr[0], _Digits);
+   json += "\"digits\":" + IntegerToString(digits) + ",";
+   json += "\"point\":" + DoubleToString(point, digits) + ",";
+   json += "\"min_stop_distance_points\":" + IntegerToString(stopsLevel) + ",";
+   json += "\"min_stop_distance\":" + DoubleToString(stopsLevel * point, digits) + ",";
+   json += "\"typical_spread_points\":" + IntegerToString((int)SymbolInfoInteger(symbol, SYMBOL_SPREAD));
    json += "}";
    return json;
 }
 
 //+------------------------------------------------------------------+
-string BuildCandlesJson(string symbol)
+string BuildSessionJson()
+{
+   datetime gmt = TimeGMT();
+   MqlDateTime dt;
+   TimeToStruct(gmt, dt);
+   string session = "asia";
+   if(dt.hour >= 7 && dt.hour < 12) session = "london";
+   else if(dt.hour >= 12 && dt.hour < 17) session = "london_ny_overlap";
+   else if(dt.hour >= 17 && dt.hour < 22) session = "new_york";
+   string days[] = {"sunday","monday","tuesday","wednesday","thursday","friday","saturday"};
+   string json = "{";
+   json += "\"utc_hour\":" + IntegerToString(dt.hour) + ",";
+   json += "\"day_of_week\":\"" + days[dt.day_of_week] + "\",";
+   json += "\"session\":\"" + session + "\"";
+   json += "}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildDailyLevelsJson(string symbol)
+{
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   MqlRates d1[], w1[];
+   double pdh = 0, pdl = 0, pdc = 0, weekHigh = 0, weekLow = 0;
+   if(CopyRates(symbol, PERIOD_D1, 1, 1, d1) == 1) { pdh = d1[0].high; pdl = d1[0].low; pdc = d1[0].close; }
+   if(CopyRates(symbol, PERIOD_W1, 0, 1, w1) == 1) { weekHigh = w1[0].high; weekLow = w1[0].low; }
+   string json = "{";
+   json += "\"prev_day_high\":" + DoubleToString(pdh, digits) + ",";
+   json += "\"prev_day_low\":" + DoubleToString(pdl, digits) + ",";
+   json += "\"prev_day_close\":" + DoubleToString(pdc, digits) + ",";
+   json += "\"week_high\":" + DoubleToString(weekHigh, digits) + ",";
+   json += "\"week_low\":" + DoubleToString(weekLow, digits);
+   json += "}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildCorrelationJson(string symbol)
+{
+   string upper = symbol;
+   StringToUpper(upper);
+   if(StringFind(upper, "XAU") < 0 && StringFind(upper, "PAXG") < 0) return "{}";
+   string dxySymbols[] = {"USDX", "DXY", "DX.f", "USDIndex"};
+   string dxySymbol = "";
+   for(int i = 0; i < ArraySize(dxySymbols); i++)
+      if(SymbolSelect(dxySymbols[i], true)) { dxySymbol = dxySymbols[i]; break; }
+   if(dxySymbol == "") return "{}";
+   int digits = (int)SymbolInfoInteger(dxySymbol, SYMBOL_DIGITS);
+   int ema20H = iMA(dxySymbol, PERIOD_H1, 20, 0, MODE_EMA, PRICE_CLOSE);
+   int ema50H = iMA(dxySymbol, PERIOD_H1, 50, 0, MODE_EMA, PRICE_CLOSE);
+   double ema20[1], ema50[1];
+   CopyBuffer(ema20H, 0, 1, 1, ema20);
+   CopyBuffer(ema50H, 0, 1, 1, ema50);
+   IndicatorRelease(ema20H); IndicatorRelease(ema50H);
+   double close = iClose(dxySymbol, PERIOD_H1, 0);
+   string trend = "neutral";
+   if(close > ema20[0] && ema20[0] > ema50[0]) trend = "bullish";
+   else if(close < ema20[0] && ema20[0] < ema50[0]) trend = "bearish";
+   string json = "{";
+   json += "\"dxy_symbol\":\"" + dxySymbol + "\",";
+   json += "\"dxy_trend\":\"" + trend + "\"";
+   json += "}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildIndicatorsJson(string symbol, ENUM_TIMEFRAMES tf)
+{
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   int ema20H = iMA(symbol, tf, 20, 0, MODE_EMA, PRICE_CLOSE);
+   int ema50H = iMA(symbol, tf, 50, 0, MODE_EMA, PRICE_CLOSE);
+   int ema200H = iMA(symbol, tf, 200, 0, MODE_EMA, PRICE_CLOSE);
+   int rsiH = iRSI(symbol, tf, 14, PRICE_CLOSE);
+   int atrH = iATR(symbol, tf, 14);
+   int macdH = iMACD(symbol, tf, 12, 26, 9, PRICE_CLOSE);
+   int adxH = iADX(symbol, tf, 14);
+   double ema20[1], ema50[1], ema200[1], rsi[1], atr[1], macdHist[1], adx[1];
+   CopyBuffer(ema20H, 0, 1, 1, ema20);
+   CopyBuffer(ema50H, 0, 1, 1, ema50);
+   CopyBuffer(ema200H, 0, 1, 1, ema200);
+   CopyBuffer(rsiH, 0, 1, 1, rsi);
+   CopyBuffer(atrH, 0, 1, 1, atr);
+   CopyBuffer(macdH, 2, 1, 1, macdHist);
+   CopyBuffer(adxH, 0, 1, 1, adx);
+   IndicatorRelease(ema20H); IndicatorRelease(ema50H); IndicatorRelease(ema200H);
+   IndicatorRelease(rsiH); IndicatorRelease(atrH); IndicatorRelease(macdH); IndicatorRelease(adxH);
+   string json = "{";
+   json += "\"ema20\":" + DoubleToString(ema20[0], digits) + ",";
+   json += "\"ema50\":" + DoubleToString(ema50[0], digits) + ",";
+   json += "\"ema200\":" + DoubleToString(ema200[0], digits) + ",";
+   json += "\"rsi\":" + DoubleToString(rsi[0], 2) + ",";
+   json += "\"atr\":" + DoubleToString(atr[0], digits) + ",";
+   json += "\"macd_histogram\":" + DoubleToString(macdHist[0], digits) + ",";
+   json += "\"adx\":" + DoubleToString(adx[0], 2);
+   json += "}";
+   return json;
+}
+
+//+------------------------------------------------------------------+
+string BuildCandlesJson(string symbol, ENUM_TIMEFRAMES tf)
 {
    MqlRates rates[];
-   int copied = CopyRates(symbol, InpTimeframe, 1, InpCandleCount, rates);
+   int copied = CopyRates(symbol, tf, 1, InpCandleCount, rates);
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
    string json = "[";
-
    for(int i = copied - 1; i >= 0; i--)
    {
       if(i < copied - 1) json += ",";
       json += "{";
       json += "\"time\":\"" + TimeToString(rates[i].time, TIME_DATE|TIME_MINUTES) + "\",";
-      json += "\"open\":" + DoubleToString(rates[i].open, _Digits) + ",";
-      json += "\"high\":" + DoubleToString(rates[i].high, _Digits) + ",";
-      json += "\"low\":" + DoubleToString(rates[i].low, _Digits) + ",";
-      json += "\"close\":" + DoubleToString(rates[i].close, _Digits) + ",";
+      json += "\"open\":" + DoubleToString(rates[i].open, digits) + ",";
+      json += "\"high\":" + DoubleToString(rates[i].high, digits) + ",";
+      json += "\"low\":" + DoubleToString(rates[i].low, digits) + ",";
+      json += "\"close\":" + DoubleToString(rates[i].close, digits) + ",";
       json += "\"volume\":" + IntegerToString((int)rates[i].tick_volume);
       json += "}";
    }
-
    json += "]";
    return json;
 }
@@ -616,9 +717,18 @@ string BuildPositionAnalysisJson(ulong ticket, string symbol)
    json += "\"duration_minutes\":" + IntegerToString(durationMinutes);
    json += "},";
    json += "\"market_data\":{";
-   json += "\"candles\":" + BuildCandlesJson(symbol) + ",";
-   json += "\"indicators\":" + BuildIndicatorsJson(symbol);
-   json += "}}";
+   json += "\"timeframe\":\"" + tf + "\",";
+   json += "\"market\":{";
+   json += "\"bid\":" + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_BID), _Digits) + ",";
+   json += "\"ask\":" + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_ASK), _Digits);
+   json += "},";
+   json += "\"candles\":" + BuildCandlesJson(symbol, InpTimeframe) + ",";
+   json += "\"indicators\":" + BuildIndicatorsJson(symbol, InpTimeframe) + ",";
+   json += "\"levels\":" + BuildDailyLevelsJson(symbol) + ",";
+   json += "\"multi_timeframe\":{";
+   json += "\"H1\":{\"indicators\":" + BuildIndicatorsJson(symbol, PERIOD_H1) + "},";
+   json += "\"H4\":{\"indicators\":" + BuildIndicatorsJson(symbol, PERIOD_H4) + "}";
+   json += "}}}";
    return json;
 }
 

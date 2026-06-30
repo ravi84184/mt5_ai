@@ -10,6 +10,7 @@ use App\Models\PositionManagementDecision;
 use App\Models\Signal;
 use App\Models\Trade;
 use App\Models\TradeManagementLog;
+use App\Services\Notifications\TelegramNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -52,7 +53,7 @@ class SignalController extends Controller
         ]);
     }
 
-    public function executed(Request $request): JsonResponse
+    public function executed(Request $request, TelegramNotificationService $telegram): JsonResponse
     {
         $validated = $request->validate([
             'signal_id' => ['required', 'integer', 'exists:signals,id'],
@@ -75,7 +76,7 @@ class SignalController extends Controller
             'ticket' => $validated['ticket'],
         ]);
 
-        Trade::updateOrCreate(
+        $trade = Trade::updateOrCreate(
             ['ticket' => $validated['ticket']],
             [
                 'signal_id' => $signal->id,
@@ -87,6 +88,8 @@ class SignalController extends Controller
                 'status' => 'OPEN',
             ]
         );
+
+        $telegram->notifyTradeOpened($trade, $signal->account);
 
         return response()->json(['status' => 'ok']);
     }

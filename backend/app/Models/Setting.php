@@ -25,6 +25,7 @@ class Setting extends Model
         'trading.ai.openai.api_key',
         'trading.ai.anthropic.api_key',
         'trading.ai.gemini.api_key',
+        'trading.telegram.bot_token',
     ];
 
     public static function isEncrypted(string $key): bool

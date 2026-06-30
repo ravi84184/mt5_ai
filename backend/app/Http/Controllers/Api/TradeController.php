@@ -7,6 +7,7 @@ use App\Http\Concerns\AuthorizesMt5Account;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Trade;
+use App\Services\Notifications\TelegramNotificationService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ class TradeController extends Controller
 {
     use AuthorizesMt5Account;
 
-    public function update(Request $request): JsonResponse
+    public function update(Request $request, TelegramNotificationService $telegram): JsonResponse
     {
         $validated = $request->validate([
             'account' => ['nullable', 'integer'],
@@ -54,18 +55,25 @@ class TradeController extends Controller
             return $response;
         }
 
+        $wasOpen = $trade->status === 'OPEN';
+        $newStatus = strtoupper($validated['status']);
+
         $trade->update([
-            'status' => strtoupper($validated['status']),
+            'status' => $newStatus,
             'profit' => $validated['profit'] ?? $trade->profit,
             'close_price' => $validated['close_price'] ?? $trade->close_price,
         ]);
 
-        if ($trade->signal_id && strtoupper($validated['status']) === 'CLOSED') {
+        if ($trade->signal_id && $newStatus === 'CLOSED') {
             $trade->signal?->update(['status' => SignalStatus::Closed]);
         }
 
         if (isset($validated['profit'])) {
             $this->updateDailyPnl($trade->account, (float) $validated['profit']);
+        }
+
+        if ($wasOpen && $newStatus === 'CLOSED') {
+            $telegram->notifyTradeClosed($trade->fresh(), $trade->account);
         }
 
         return response()->json(['status' => 'ok']);

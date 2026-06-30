@@ -49,6 +49,6 @@ class AdminTest extends TestCase
             ->get(route('admin.overview'))
             ->assertOk()
             ->assertSee('Super Admin Overview')
-            ->assertSee('104392039');
+            ->assertSee('Win rate (30d)');
     }
 }

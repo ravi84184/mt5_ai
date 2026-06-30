@@ -7,6 +7,7 @@
         ['route' => 'admin.management.index', 'label' => 'Management'],
         ['route' => 'admin.snapshots.index', 'label' => 'Market Data'],
         ['route' => 'admin.ai-logs.index', 'label' => 'AI Logs'],
+        ['route' => 'admin.backtest.index', 'label' => 'Backtest'],
         ['route' => 'admin.system.index', 'label' => 'System'],
     ];
 @endphp

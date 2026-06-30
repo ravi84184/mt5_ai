@@ -4,6 +4,7 @@ use App\Enums\AiProvider;
 use App\Http\Controllers\Admin\AccountController;
 use App\Http\Controllers\Admin\AdminAuthController;
 use App\Http\Controllers\Admin\AiLogController;
+use App\Http\Controllers\Admin\BacktestController;
 use App\Http\Controllers\Admin\ManagementController;
 use App\Http\Controllers\Admin\OverviewController;
 use App\Http\Controllers\Admin\SignalController;
@@ -49,6 +50,10 @@ Route::middleware('admin.auth')->group(function () {
 
     Route::get('ai-logs', [AiLogController::class, 'index'])->name('ai-logs.index');
     Route::get('ai-logs/{aiLog}', [AiLogController::class, 'show'])->name('ai-logs.show');
+
+    Route::get('backtest', [BacktestController::class, 'index'])->name('backtest.index');
+    Route::post('backtest', [BacktestController::class, 'store'])->name('backtest.store');
+    Route::get('backtest/{backtest}', [BacktestController::class, 'show'])->name('backtest.show');
 
     Route::get('system', [SystemController::class, 'index'])->name('system.index');
     Route::get('system/settings', [SystemController::class, 'settings'])->name('system.settings');

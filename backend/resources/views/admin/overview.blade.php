@@ -29,13 +29,20 @@
             ['Queued jobs', $stats['queued_jobs']],
             ['Failed jobs', $stats['failed_jobs']],
             ['AI calls today', $stats['ai_logs_today']],
+            ['Win rate (30d)', $stats['win_rate_30d'] !== null ? $stats['win_rate_30d'].'%' : 'n/a'],
+            ['P&L (30d)', number_format($stats['total_profit_30d'] ?? 0, 2)],
         ] as [$label, $value])
             <div class="card">
                 <p class="card-label">{{ $label }}</p>
-                <p class="card-value">{{ number_format($value) }}</p>
+                <p class="card-value">{{ is_numeric($value) ? number_format($value) : $value }}</p>
             </div>
         @endforeach
     </div>
+
+    <section class="panel" style="margin-top:1.5rem">
+        <div class="panel-header"><h2>30-day cumulative P&amp;L</h2></div>
+        <div style="padding:1rem"><canvas id="pnlChart" height="100"></canvas></div>
+    </section>
 
     <div class="grid-2" style="margin-top:1.5rem">
         <section class="panel">
@@ -106,4 +113,24 @@
             </table>
         </section>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        const pnlData = @json($dailyPnl);
+        if (document.getElementById('pnlChart') && pnlData.length) {
+            new Chart(document.getElementById('pnlChart'), {
+                type: 'line',
+                data: {
+                    labels: pnlData.map(r => r.date),
+                    datasets: [{
+                        label: 'Cumulative P&L',
+                        data: pnlData.map(r => r.cumulative),
+                        borderColor: '#34d399',
+                        tension: 0.3,
+                    }]
+                },
+                options: { plugins: { legend: { display: false } } }
+            });
+        }
+    </script>
 @endsection
