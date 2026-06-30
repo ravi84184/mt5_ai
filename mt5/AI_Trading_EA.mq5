@@ -604,6 +604,12 @@ string BuildCandlesJson(string symbol, ENUM_TIMEFRAMES tf)
 //+------------------------------------------------------------------+
 void PollSignals()
 {
+   if(!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) || !MQLInfoInteger(MQL_TRADE_ALLOWED))
+   {
+      Print("Signal poll skipped — AutoTrading disabled (enable Algo Trading in MT5)");
+      return;
+   }
+
    string url = InpApiBaseUrl + "/signals?account=" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LOGIN));
    string response;
    if(!HttpGet(url, response))
@@ -620,41 +626,171 @@ void PollSignals()
    double sl = JsonGetDouble(response, "stop_loss");
    double tp = JsonGetDouble(response, "take_profit");
 
-   if(confidence < g_minConfidence)
+   StringToUpper(action);
+
+   if(signalId <= 0 || symbol == "" || (action != "BUY" && action != "SELL"))
    {
-      Print("Signal rejected: confidence ", confidence, " < ", g_minConfidence);
+      Print("Signal parse failed: ", response);
+      return;
+   }
+
+   Print("Pending signal #", signalId, ": ", action, " ", symbol,
+         " conf=", confidence, " entry=", entry, " sl=", sl, " tp=", tp);
+
+   if(!SymbolSelect(symbol, true))
+   {
+      Print("Signal rejected: symbol not available on broker — ", symbol);
+      NotifySignalFailed(signalId, "Symbol not available on broker: " + symbol);
       return;
    }
 
    if(CountOpenTrades() >= g_maxOpenTrades)
    {
       Print("Signal rejected: max open trades reached (", g_maxOpenTrades, ")");
+      NotifySignalFailed(signalId, "Max open trades reached on MT5");
       return;
    }
 
    if(HasOpenPosition(symbol))
    {
       Print("Signal rejected: position already open on ", symbol);
+      NotifySignalFailed(signalId, "Position already open on " + symbol);
+      return;
+   }
+
+   double marketPrice = (action == "BUY")
+      ? SymbolInfoDouble(symbol, SYMBOL_ASK)
+      : SymbolInfoDouble(symbol, SYMBOL_BID);
+
+   if(entry <= 0)
+      entry = marketPrice;
+
+   if(sl <= 0 || tp <= 0)
+   {
+      Print("Signal rejected: missing stop_loss or take_profit");
+      NotifySignalFailed(signalId, "Missing stop_loss or take_profit");
+      return;
+   }
+
+   if(!NormalizeStopsForBroker(symbol, action, sl, tp, marketPrice))
+   {
+      Print("Signal rejected: invalid SL/TP for broker stops level");
+      NotifySignalFailed(signalId, "Invalid SL/TP for broker minimum stop distance");
       return;
    }
 
    double lot = CalculateLotSize(symbol, entry, sl);
-   bool success = false;
-   ulong ticket = 0;
+   if(lot <= 0)
+   {
+      Print("Signal rejected: lot size is zero");
+      NotifySignalFailed(signalId, "Calculated lot size is zero");
+      return;
+   }
 
-   if(action == "BUY")
-      success = trade.Buy(lot, symbol, 0, sl, tp, "AI Signal #" + IntegerToString(signalId));
-   else if(action == "SELL")
-      success = trade.Sell(lot, symbol, 0, sl, tp, "AI Signal #" + IntegerToString(signalId));
-
+   bool success = ExecuteSignalTrade(symbol, action, lot, sl, tp, signalId);
    if(success)
    {
-      ticket = trade.ResultOrder();
-      Print("Trade executed: ", action, " ", symbol, " lot=", lot, " ticket=", ticket);
-      NotifySignalExecuted(signalId, ticket, symbol, action, lot, entry);
+      ulong ticket = trade.ResultDeal();
+      if(ticket == 0)
+         ticket = trade.ResultOrder();
+      double fillPrice = trade.ResultPrice();
+      if(fillPrice <= 0)
+         fillPrice = marketPrice;
+      Print("Trade executed: ", action, " ", symbol, " lot=", lot, " ticket=", ticket, " price=", fillPrice);
+      NotifySignalExecuted(signalId, ticket, symbol, action, lot, fillPrice);
    }
    else
-      Print("Trade FAILED: ", action, " ", symbol, " error=", GetLastError(), " retcode=", trade.ResultRetcode());
+   {
+      string err = "Trade failed retcode=" + IntegerToString((int)trade.ResultRetcode())
+         + " err=" + IntegerToString(GetLastError())
+         + " comment=" + trade.ResultComment();
+      Print("Trade FAILED: ", action, " ", symbol, " — ", err);
+   }
+}
+
+//+------------------------------------------------------------------+
+bool ExecuteSignalTrade(string symbol, string action, double lot, double sl, double tp, int signalId)
+{
+   string comment = "AI Signal #" + IntegerToString(signalId);
+   ENUM_ORDER_TYPE_FILLING fillings[3] = {ORDER_FILLING_IOC, ORDER_FILLING_FOK, ORDER_FILLING_RETURN};
+
+   for(int i = 0; i < 3; i++)
+   {
+      trade.SetTypeFilling(fillings[i]);
+      bool success = false;
+      if(action == "BUY")
+         success = trade.Buy(lot, symbol, 0, sl, tp, comment);
+      else
+         success = trade.Sell(lot, symbol, 0, sl, tp, comment);
+
+      if(success)
+         return true;
+
+      uint retcode = trade.ResultRetcode();
+      if(retcode != TRADE_RETCODE_INVALID_FILL && retcode != TRADE_RETCODE_INVALID_ORDER)
+         break;
+   }
+
+   return false;
+}
+
+//+------------------------------------------------------------------+
+bool NormalizeStopsForBroker(string symbol, string action, double &sl, double &tp, double marketPrice)
+{
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   if(point <= 0)
+      return false;
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   int stopsLevel = (int)SymbolInfoInteger(symbol, SYMBOL_TRADE_STOPS_LEVEL);
+   double minDist = stopsLevel * point;
+
+   sl = NormalizeDouble(sl, digits);
+   tp = NormalizeDouble(tp, digits);
+   marketPrice = NormalizeDouble(marketPrice, digits);
+
+   if(action == "BUY")
+   {
+      if(sl >= marketPrice || tp <= marketPrice)
+         return false;
+      if(minDist > 0)
+      {
+         if((marketPrice - sl) < minDist)
+            sl = NormalizeDouble(marketPrice - minDist, digits);
+         if((tp - marketPrice) < minDist)
+            tp = NormalizeDouble(marketPrice + minDist, digits);
+      }
+   }
+   else
+   {
+      if(sl <= marketPrice || tp >= marketPrice)
+         return false;
+      if(minDist > 0)
+      {
+         if((sl - marketPrice) < minDist)
+            sl = NormalizeDouble(marketPrice + minDist, digits);
+         if((marketPrice - tp) < minDist)
+            tp = NormalizeDouble(marketPrice - minDist, digits);
+      }
+   }
+
+   return true;
+}
+
+//+------------------------------------------------------------------+
+void NotifySignalFailed(int signalId, string reason)
+{
+   string safeReason = reason;
+   StringReplace(safeReason, "\\", " ");
+   StringReplace(safeReason, "\"", "'");
+
+   string json = "{";
+   json += "\"signal_id\":" + IntegerToString(signalId) + ",";
+   json += "\"reason\":\"" + safeReason + "\"";
+   json += "}";
+
+   string response;
+   HttpPost(InpApiBaseUrl + "/signals/failed", json, response);
 }
 
 //+------------------------------------------------------------------+

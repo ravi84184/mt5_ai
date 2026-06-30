@@ -71,6 +71,10 @@ class SignalController extends Controller
             return $response;
         }
 
+        if ($signal->status !== SignalStatus::Pending) {
+            return response()->json(['status' => 'ok', 'message' => 'Signal already processed']);
+        }
+
         $signal->update([
             'status' => SignalStatus::Executed,
             'ticket' => $validated['ticket'],
@@ -90,6 +94,31 @@ class SignalController extends Controller
         );
 
         $telegram->notifyTradeOpened($trade, $signal->account);
+
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function failed(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'signal_id' => ['required', 'integer', 'exists:signals,id'],
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+
+        $signal = Signal::findOrFail($validated['signal_id']);
+
+        if ($response = $this->denyIfWrongAccountId($request, $signal->account_id)) {
+            return $response;
+        }
+
+        if ($signal->status !== SignalStatus::Pending) {
+            return response()->json(['status' => 'ok']);
+        }
+
+        $signal->update([
+            'status' => SignalStatus::Rejected,
+            'rejection_reason' => 'EA: '.$validated['reason'],
+        ]);
 
         return response()->json(['status' => 'ok']);
     }

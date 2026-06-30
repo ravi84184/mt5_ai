@@ -13,6 +13,7 @@ Route::middleware(VerifyMt5ApiToken::class)->group(function () {
     Route::post('/market-data', [MarketDataController::class, 'store']);
     Route::get('/signals', [SignalController::class, 'index']);
     Route::post('/signals/executed', [SignalController::class, 'executed']);
+    Route::post('/signals/failed', [SignalController::class, 'failed']);
     Route::get('/signals/management', [SignalController::class, 'management']);
     Route::post('/signals/management/applied', [SignalController::class, 'managementApplied']);
     Route::post('/position-analysis', [PositionAnalysisController::class, 'store']);
